@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mafia-game-v2';
+const CACHE_NAME = 'mafia-game-v3';
 const STATIC_ASSETS = [
     '/',
     '/index.html',
@@ -9,7 +9,9 @@ const STATIC_ASSETS = [
     '/images/doctor.png',
     '/images/detective.png',
     '/images/table.png',
-    '/images/icon.svg'
+    '/images/icon.svg',
+    '/images/icon-192.png',
+    '/images/icon-512.png'
 ];
 
 // Install - cache static assets

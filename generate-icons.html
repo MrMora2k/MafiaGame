@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Generate PWA Icons</title>
+</head>
+
+<body>
+    <h1>PWA Icon Generator</h1>
+    <p>Right-click each image and save it to public/images/</p>
+
+    <h2>icon-192.png</h2>
+    <canvas id="canvas192" width="192" height="192"></canvas>
+
+    <h2>icon-512.png</h2>
+    <canvas id="canvas512" width="512" height="512"></canvas>
+
+    <script>
+        function drawIcon(canvas) {
+            const ctx = canvas.getContext('2d');
+            const size = canvas.width;
+            const scale = size / 512;
+
+            // Background gradient
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#1a0a2e');
+            gradient.addColorStop(1, '#0a0a0f');
+
+            // Rounded rectangle background
+            ctx.beginPath();
+            const radius = 80 * scale;
+            ctx.moveTo(radius, 0);
+            ctx.lineTo(size - radius, 0);
+            ctx.quadraticCurveTo(size, 0, size, radius);
+            ctx.lineTo(size, size - radius);
+            ctx.quadraticCurveTo(size, size, size - radius, size);
+            ctx.lineTo(radius, size);
+            ctx.quadraticCurveTo(0, size, 0, size - radius);
+            ctx.lineTo(0, radius);
+            ctx.quadraticCurveTo(0, 0, radius, 0);
+            ctx.closePath();
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            // Outer glow ring
+            ctx.beginPath();
+            ctx.arc(size / 2, size / 2, 180 * scale, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(124, 94, 245, 0.3)';
+            ctx.lineWidth = 8 * scale;
+            ctx.stroke();
+
+            // Happy mask (left)
+            ctx.save();
+            ctx.translate(130 * scale, 180 * scale);
+
+            // Mask face
+            ctx.beginPath();
+            ctx.ellipse(60 * scale, 70 * scale, 55 * scale, 65 * scale, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#f5f0e6';
+            ctx.fill();
+
+            // Left eye
+            ctx.beginPath();
+            ctx.ellipse(40 * scale, 55 * scale, 12 * scale, 10 * scale, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#1a0a2e';
+            ctx.fill();
+
+            // Right eye
+            ctx.beginPath();
+            ctx.ellipse(80 * scale, 55 * scale, 12 * scale, 10 * scale, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#1a0a2e';
+            ctx.fill();
+
+            // Smile
+            ctx.beginPath();
+            ctx.moveTo(35 * scale, 90 * scale);
+            ctx.quadraticCurveTo(60 * scale, 120 * scale, 85 * scale, 90 * scale);
+            ctx.strokeStyle = '#1a0a2e';
+            ctx.lineWidth = 6 * scale;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            ctx.restore();
+
+            // Sad mask (right, behind)
+            ctx.save();
+            ctx.translate(240 * scale, 170 * scale);
+
+            // Mask face
+            ctx.beginPath();
+            ctx.ellipse(60 * scale, 70 * scale, 55 * scale, 65 * scale, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#2d1f3d';
+            ctx.fill();
+
+            // Left eye
+            ctx.beginPath();
+            ctx.ellipse(40 * scale, 55 * scale, 12 * scale, 10 * scale, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#0a0a0f';
+            ctx.fill();
+
+            // Right eye
+            ctx.beginPath();
+            ctx.ellipse(80 * scale, 55 * scale, 12 * scale, 10 * scale, 0, 0, Math.PI * 2);
+            ctx.fillStyle = '#0a0a0f';
+            ctx.fill();
+
+            // Frown
+            ctx.beginPath();
+            ctx.moveTo(35 * scale, 100 * scale);
+            ctx.quadraticCurveTo(60 * scale, 80 * scale, 85 * scale, 100 * scale);
+            ctx.strokeStyle = '#0a0a0f';
+            ctx.lineWidth = 6 * scale;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            ctx.restore();
+
+            // Title text
+            ctx.fillStyle = '#7c5ef5';
+            ctx.font = `bold ${60 * scale}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.fillText('مافيا', size / 2, 420 * scale);
+        }
+
+        drawIcon(document.getElementById('canvas192'));
+        drawIcon(document.getElementById('canvas512'));
+
+        // Convert to downloadable links
+        setTimeout(() => {
+            ['192', '512'].forEach(size => {
+                const canvas = document.getElementById('canvas' + size);
+                const link = document.createElement('a');
+                link.download = `icon-${size}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.textContent = `Download icon-${size}.png`;
+                link.style.display = 'block';
+                link.style.marginTop = '10px';
+                canvas.parentNode.insertBefore(link, canvas.nextSibling);
+            });
+        }, 100);
+    </script>
+</body>
+
+</html>
