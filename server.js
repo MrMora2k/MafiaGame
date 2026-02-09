@@ -124,10 +124,46 @@ function resetRoomForNewGame(room) {
         p.ready = false;
     });
 }
+// Handle player leaving room
+function handlePlayerLeave(socket) {
+    const roomCode = socket.roomCode;
+    if (!roomCode) return;
+
+    const room = rooms.get(roomCode);
+    if (!room) return;
+
+    // Remove player from room
+    room.players = room.players.filter(p => p.id !== socket.id);
+    socket.leave(roomCode);
+
+    // If room is empty, delete it
+    if (room.players.length === 0) {
+        rooms.delete(roomCode);
+        console.log(`Room ${roomCode} deleted (empty)`);
+        return;
+    }
+
+    // If host left, assign new host
+    if (room.host === socket.id && room.players.length > 0) {
+        room.host = room.players[0].id;
+        io.to(room.players[0].id).emit('host:assigned');
+        console.log(`New host assigned in room ${roomCode}: ${room.players[0].name}`);
+    }
+
+    // Notify remaining players
+    io.to(roomCode).emit('player:list', room.players);
+    console.log(`Player ${socket.id} left room ${roomCode}`);
+}
 
 // Socket.io connection handling
 io.on('connection', (socket) => {
     console.log(`Player connected: ${socket.id}`);
+
+    // Handle disconnect
+    socket.on('disconnect', () => {
+        console.log(`Player disconnected: ${socket.id}`);
+        handlePlayerLeave(socket);
+    });
 
     // Create a new room with settings
     socket.on('room:create', ({ playerName, settings }) => {
