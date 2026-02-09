@@ -28,10 +28,11 @@
                     <p class="game-subtitle">نسخة الطاولة المستديرة</p>
                 </header>
 
-                <!-- Create/Join Toggle -->
+                <!-- Create/Join/Browse Toggle -->
                 <div class="lobby-tabs">
                     <button class="tab-btn active" data-tab="create">إنشاء غرفة</button>
                     <button class="tab-btn" data-tab="join">الانضمام</button>
+                    <button class="tab-btn" data-tab="browse">الغرف المتاحة</button>
                 </div>
 
                 <!-- Create Room Form -->
@@ -59,6 +60,21 @@
 
                 <!-- Error Message -->
                 <div class="error-message hidden" id="lobby-error"></div>
+
+                <!-- Browse Public Rooms -->
+                <div class="lobby-form hidden" id="browse-form">
+                    <div class="input-group">
+                        <label for="browse-name">اسمك</label>
+                        <input type="text" id="browse-name" placeholder="أدخل اسمك" maxlength="15" autocomplete="off">
+                    </div>
+                    <div class="public-rooms-list">
+                        <h3>🌐 الغرف العامة المتاحة</h3>
+                        <button class="btn btn-small" id="refresh-rooms-btn">تحديث 🔄</button>
+                        <div id="rooms-list" class="rooms-list">
+                            <p class="no-rooms">لا توجد غرف متاحة حالياً</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -126,6 +142,13 @@
                             <input type="checkbox" id="setting-self-heal" checked>
                             <span class="toggle-switch"></span>
                             <span>الطبيب يمكنه حماية نفسه</span>
+                        </label>
+                    </div>
+                    <div class="setting-toggle">
+                        <label class="toggle-label">
+                            <input type="checkbox" id="setting-public">
+                            <span class="toggle-switch"></span>
+                            <span>🌐 غرفة عامة (تظهر في قائمة الغرف)</span>
                         </label>
                     </div>
                 </div>

@@ -205,6 +205,59 @@ input {
     box-shadow: var(--shadow-soft);
 }
 
+/* Public Rooms List */
+.public-rooms-list {
+    margin-top: 20px;
+}
+
+.public-rooms-list h3 {
+    margin-bottom: 15px;
+    font-size: 1.1rem;
+}
+
+.rooms-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.no-rooms {
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 20px;
+}
+
+.room-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-secondary);
+    padding: 12px 16px;
+    border-radius: 12px;
+    margin-bottom: 10px;
+}
+
+.room-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: right;
+}
+
+.room-host {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.room-players {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.btn-join-room {
+    padding: 8px 16px;
+    font-size: 0.9rem;
+}
+
 .lobby-form.hidden {
     display: none;
 }

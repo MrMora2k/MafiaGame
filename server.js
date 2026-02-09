@@ -10,6 +10,22 @@ const io = new Server(server);
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
 
+// API to get public rooms
+app.get('/api/rooms', (req, res) => {
+    const publicRooms = [];
+    rooms.forEach((room, code) => {
+        if (room.settings.isPublic && room.phase === 'lobby') {
+            publicRooms.push({
+                code: code,
+                hostName: room.players[0]?.name || 'Unknown',
+                playerCount: room.players.length,
+                maxPlayers: room.settings.maxPlayers
+            });
+        }
+    });
+    res.json(publicRooms);
+});
+
 // Game state storage
 const rooms = new Map();
 
@@ -36,7 +52,8 @@ const DEFAULT_SETTINGS = {
     mafiaCount: 0, // 0 = auto (floor(players/4))
     doctorCount: 1,
     detectiveCount: 1,
-    doctorSelfHeal: true
+    doctorSelfHeal: true,
+    isPublic: false
 };
 
 // Generate a random 6-character room code

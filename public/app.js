@@ -59,6 +59,10 @@ const elements = {
     settingDoctors: document.getElementById('setting-doctors'),
     settingDetectives: document.getElementById('setting-detectives'),
     settingSelfHeal: document.getElementById('setting-self-heal'),
+    settingPublic: document.getElementById('setting-public'),
+    browseName: document.getElementById('browse-name'),
+    roomsList: document.getElementById('rooms-list'),
+    refreshRoomsBtn: document.getElementById('refresh-rooms-btn'),
     roleCard: document.getElementById('role-card'),
     roleIcon: document.getElementById('role-icon'),
     roleName: document.getElementById('role-name'),
@@ -99,6 +103,7 @@ function init() {
     if (savedName) {
         elements.createName.value = savedName;
         elements.joinName.value = savedName;
+        elements.browseName.value = savedName;
     }
 }
 init();
@@ -123,8 +128,56 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
         const tab = btn.dataset.tab;
         document.getElementById('create-form').classList.toggle('hidden', tab !== 'create');
         document.getElementById('join-form').classList.toggle('hidden', tab !== 'join');
+        document.getElementById('browse-form').classList.toggle('hidden', tab !== 'browse');
+
+        // Auto-fetch rooms when browse tab is selected
+        if (tab === 'browse') {
+            fetchPublicRooms();
+        }
     });
 });
+
+// Fetch and display public rooms
+async function fetchPublicRooms() {
+    try {
+        const response = await fetch('/api/rooms');
+        const rooms = await response.json();
+
+        if (rooms.length === 0) {
+            elements.roomsList.innerHTML = '<p class="no-rooms">لا توجد غرف عامة متاحة حالياً</p>';
+        } else {
+            elements.roomsList.innerHTML = rooms.map(room => `
+                <div class="room-item" data-code="${room.code}">
+                    <div class="room-item-info">
+                        <span class="room-host">🎮 ${room.hostName}</span>
+                        <span class="room-players">${room.playerCount}/${room.maxPlayers} لاعب</span>
+                    </div>
+                    <button class="btn btn-small btn-join-room" data-code="${room.code}">انضمام</button>
+                </div>
+            `).join('');
+
+            // Add click handlers to join buttons
+            document.querySelectorAll('.btn-join-room').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    joinPublicRoom(btn.dataset.code);
+                });
+            });
+        }
+    } catch (error) {
+        console.error('Failed to fetch rooms:', error);
+        elements.roomsList.innerHTML = '<p class="no-rooms">فشل في تحميل الغرف</p>';
+    }
+}
+
+function joinPublicRoom(code) {
+    const name = elements.browseName.value.trim();
+    if (!name) return showError('الرجاء إدخال اسمك');
+    state.playerName = name;
+    savePlayerName(name);
+    socket.emit('room:join', { roomCode: code, playerName: name });
+}
+
+elements.refreshRoomsBtn.addEventListener('click', fetchPublicRooms);
 
 elements.createBtn.addEventListener('click', () => {
     const name = elements.createName.value.trim();
@@ -165,6 +218,7 @@ function setupSettingsHandlers() {
     elements.settingDoctors.addEventListener('change', updateSettings);
     elements.settingDetectives.addEventListener('change', updateSettings);
     elements.settingSelfHeal.addEventListener('change', updateSettings);
+    elements.settingPublic.addEventListener('change', updateSettings);
 }
 
 function updateSettings() {
@@ -174,7 +228,8 @@ function updateSettings() {
         mafiaCount: parseInt(elements.settingMafia.value),
         doctorCount: parseInt(elements.settingDoctors.value),
         detectiveCount: parseInt(elements.settingDetectives.value),
-        doctorSelfHeal: elements.settingSelfHeal.checked
+        doctorSelfHeal: elements.settingSelfHeal.checked,
+        isPublic: elements.settingPublic.checked
     };
     socket.emit('room:updateSettings', settings);
 }
@@ -187,6 +242,7 @@ function applySettings(settings) {
     elements.settingDoctors.value = settings.doctorCount;
     elements.settingDetectives.value = settings.detectiveCount;
     elements.settingSelfHeal.checked = settings.doctorSelfHeal;
+    elements.settingPublic.checked = settings.isPublic || false;
 }
 
 setupSettingsHandlers();
