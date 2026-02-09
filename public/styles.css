@@ -760,6 +760,25 @@ input {
     box-shadow: 0 0 20px var(--accent-glow);
 }
 
+/* Mafia teammate highlight - visible only to mafia players */
+.player-seat.teammate .seat-avatar {
+    border-color: var(--color-mafia);
+    box-shadow: 0 0 15px rgba(229, 62, 62, 0.5);
+}
+
+.player-seat.teammate .seat-name {
+    background: var(--color-mafia);
+    color: white;
+}
+
+.player-seat.teammate::after {
+    content: '🔪';
+    position: absolute;
+    top: -5px;
+    left: -5px;
+    font-size: 0.9rem;
+}
+
 .self-role-badge {
     position: absolute;
     top: -8px;

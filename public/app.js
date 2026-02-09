@@ -319,12 +319,21 @@ function updatePlayerList(players) {
 }
 
 // ==================== SOCKET EVENTS - ROLE REVEAL ====================
-socket.on('role:assigned', ({ role }) => {
+socket.on('role:assigned', ({ role, teammates }) => {
     state.role = role;
+    state.teammates = teammates || [];
     const info = ROLE_INFO[role];
     elements.roleIcon.innerHTML = `<img src="${info.image}" alt="${info.name}" style="width: 80px; height: 80px; object-fit: contain;">`;
     elements.roleName.textContent = info.name;
-    elements.roleDescription.textContent = info.description;
+
+    // If mafia with teammates, show them in description
+    if (role === 'mafia' && teammates && teammates.length > 0) {
+        const teammateNames = teammates.map(t => `${t.name} (#${t.playerNumber})`).join('، ');
+        elements.roleDescription.innerHTML = `${info.description}<br><br><strong>🔪 زملاؤك المافيا:</strong> ${teammateNames}`;
+    } else {
+        elements.roleDescription.textContent = info.description;
+    }
+
     document.querySelector('.card-back').className = `card-face card-back role-${role}`;
     elements.roleCard.classList.remove('flipped');
     elements.readyBtn.disabled = true;
@@ -390,21 +399,28 @@ function updateActionPanel() {
         if (role === 'mafia') {
             elements.actionTitle.textContent = '🔪 اختر ضحيتك';
             elements.actionHint.textContent = 'اختر لاعباً لإزالته الليلة';
+            elements.skipActionBtn.style.display = 'none';
         } else if (role === 'doctor') {
             const selfHealText = state.settings.doctorSelfHeal ? ' (يمكنك حماية نفسك)' : '';
             elements.actionTitle.textContent = '💉 أنقذ شخصاً';
             elements.actionHint.textContent = 'اختر لاعباً لحمايته من المافيا' + selfHealText;
+            elements.skipActionBtn.style.display = 'none';
         } else if (role === 'detective') {
             elements.actionTitle.textContent = '🔍 حقق';
             elements.actionHint.textContent = 'اختر لاعباً لاكتشاف هويته الحقيقية';
+            elements.skipActionBtn.style.display = 'none';
         } else {
+            // Citizen - show skip button
             elements.actionTitle.textContent = '💤 الليل مظلم...';
-            elements.actionHint.textContent = 'انتظر الفجر. المدينة نائمة.';
+            elements.actionHint.textContent = 'انتظر الفجر أو اضغط تخطي للمتابعة';
+            elements.skipActionBtn.style.display = 'inline-block';
+            elements.skipActionBtn.textContent = 'تخطي ⏭️';
         }
     } else if (phase === 'day') {
         elements.actionTitle.textContent = '⚖️ وقت التصويت';
         elements.actionHint.textContent = 'ناقش وصوّت لإزالة المشتبه به';
         elements.skipActionBtn.style.display = 'inline-block';
+        elements.skipActionBtn.textContent = 'تخطي التصويت';
     }
 }
 
@@ -414,20 +430,22 @@ function renderSeats() {
 
     elements.seatsContainer.innerHTML = players.map((player, index) => {
         const angle = (360 / count) * index - 90;
-        const initial = player.name.charAt(0).toUpperCase();
+        const playerNum = player.playerNumber || (index + 1);
         const isSelf = player.id === state.playerId;
         const isDead = !player.alive;
         const isSelected = state.selectedTarget === player.id;
+        const isTeammate = state.teammates && state.teammates.some(t => t.id === player.id);
 
         let classes = 'player-seat';
         if (isSelf) classes += ' self';
         if (isDead) classes += ' dead';
         if (isSelected) classes += ' selected';
+        if (isTeammate) classes += ' teammate';
 
-        // Show role image for self, initial for others
+        // Show role image for self, player number for others
         const avatarContent = isSelf
             ? `<img src="${ROLE_INFO[state.role].image}" alt="${state.role}" class="seat-avatar-img">`
-            : initial;
+            : playerNum;
 
         return `
             <div class="${classes}" data-player-id="${player.id}" style="--angle: ${angle}deg">
@@ -494,9 +512,18 @@ function handleSeatClick(seat) {
 elements.skipActionBtn.addEventListener('click', () => {
     if (state.hasActed) return;
     state.hasActed = true;
-    socket.emit('day:skipVote');
-    elements.actionTitle.textContent = '✓ تم التخطي';
-    elements.actionHint.textContent = 'في انتظار الأصوات الأخرى...';
+
+    if (state.phase === 'night') {
+        // Citizen skipping night
+        socket.emit('night:skip');
+        elements.actionTitle.textContent = '✓ تم التخطي';
+        elements.actionHint.textContent = 'في انتظار اللاعبين الآخرين...';
+    } else {
+        // Day vote skip
+        socket.emit('day:skipVote');
+        elements.actionTitle.textContent = '✓ تم التخطي';
+        elements.actionHint.textContent = 'في انتظار الأصوات الأخرى...';
+    }
     elements.skipActionBtn.style.display = 'none';
 });
 

@@ -195,6 +195,7 @@ io.on('connection', (socket) => {
             players: [{
                 id: socket.id,
                 name: playerName,
+                playerNumber: 1,
                 role: null,
                 alive: true,
                 ready: false
@@ -244,6 +245,7 @@ io.on('connection', (socket) => {
         room.players.push({
             id: socket.id,
             name: playerName,
+            playerNumber: room.players.length + 1,
             role: null,
             alive: true,
             ready: false
@@ -282,16 +284,28 @@ io.on('connection', (socket) => {
         room.players = assignRoles(room.players, room.settings);
         room.phase = PHASES.ROLE_REVEAL;
 
-        // Send role to each player
+        // Get list of mafia players for team awareness
+        const mafiaTeam = room.players
+            .filter(p => p.role === ROLES.MAFIA)
+            .map(p => ({ id: p.id, name: p.name, playerNumber: p.playerNumber }));
+
+        // Send role to each player (with mafia teammates if applicable)
         room.players.forEach(player => {
-            io.to(player.id).emit('role:assigned', {
+            const roleData = {
                 role: player.role,
                 phase: room.phase
-            });
+            };
+
+            // If player is mafia, send list of teammates
+            if (player.role === ROLES.MAFIA) {
+                roleData.teammates = mafiaTeam.filter(m => m.id !== player.id);
+            }
+
+            io.to(player.id).emit('role:assigned', roleData);
         });
 
         io.to(socket.roomCode).emit('game:started', {
-            players: room.players.map(p => ({ id: p.id, name: p.name, alive: p.alive })),
+            players: room.players.map(p => ({ id: p.id, name: p.name, playerNumber: p.playerNumber, alive: p.alive })),
             phase: room.phase
         });
 
@@ -359,6 +373,26 @@ io.on('connection', (socket) => {
         });
 
         socket.emit('night:actionConfirmed', { targetId });
+
+        checkNightComplete(room);
+    });
+
+    // Night skip (for citizens)
+    socket.on('night:skip', () => {
+        const room = rooms.get(socket.roomCode);
+        if (!room || room.phase !== PHASES.NIGHT) return;
+
+        const player = room.players.find(p => p.id === socket.id);
+        if (!player || !player.alive) return;
+
+        // Only citizens can skip
+        if (player.role !== ROLES.CITIZEN) return;
+
+        // Mark this citizen as having acted
+        room.nightActions['citizenSkips'] = room.nightActions['citizenSkips'] || [];
+        if (!room.nightActions['citizenSkips'].includes(socket.id)) {
+            room.nightActions['citizenSkips'].push(socket.id);
+        }
 
         checkNightComplete(room);
     });
@@ -444,7 +478,7 @@ function startNightPhase(room) {
 
     io.to(room.code).emit('phase:night', {
         dayNumber: room.dayNumber,
-        players: room.players.map(p => ({ id: p.id, name: p.name, alive: p.alive })),
+        players: room.players.map(p => ({ id: p.id, name: p.name, playerNumber: p.playerNumber, alive: p.alive })),
         settings: room.settings
     });
 }
@@ -455,12 +489,14 @@ function checkNightComplete(room) {
     const aliveMafia = alivePlayers.filter(p => p.role === ROLES.MAFIA);
     const aliveDoctors = alivePlayers.filter(p => p.role === ROLES.DOCTOR);
     const aliveDetectives = alivePlayers.filter(p => p.role === ROLES.DETECTIVE);
+    const aliveCitizens = alivePlayers.filter(p => p.role === ROLES.CITIZEN);
 
     const mafiaActed = room.nightActions[ROLES.MAFIA]?.length >= aliveMafia.length;
     const doctorsActed = aliveDoctors.length === 0 || room.nightActions[ROLES.DOCTOR]?.length >= aliveDoctors.length;
     const detectivesActed = aliveDetectives.length === 0 || room.nightActions[ROLES.DETECTIVE]?.length >= aliveDetectives.length;
+    const citizensSkipped = aliveCitizens.length === 0 || (room.nightActions['citizenSkips']?.length >= aliveCitizens.length);
 
-    if (mafiaActed && doctorsActed && detectivesActed) {
+    if (mafiaActed && doctorsActed && detectivesActed && citizensSkipped) {
         resolveNight(room);
     }
 }
@@ -546,7 +582,7 @@ function startDayPhase(room) {
 
     io.to(room.code).emit('phase:day', {
         dayNumber: room.dayNumber,
-        players: room.players.map(p => ({ id: p.id, name: p.name, alive: p.alive }))
+        players: room.players.map(p => ({ id: p.id, name: p.name, playerNumber: p.playerNumber, alive: p.alive }))
     });
 }
 
