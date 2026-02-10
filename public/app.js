@@ -582,25 +582,9 @@ socket.on('phase:day', ({ dayNumber, players }) => {
     renderSeats();
 });
 
-socket.on('vote:update', ({ votes }) => {
-    const voteCounts = {};
-    Object.values(votes).forEach(targetId => {
-        if (targetId !== 'skip') {
-            voteCounts[targetId] = (voteCounts[targetId] || 0) + 1;
-        }
-    });
-
-    document.querySelectorAll('.player-seat').forEach(seat => {
-        const playerId = seat.dataset.playerId;
-        const count = voteCounts[playerId] || 0;
-        const badge = seat.querySelector('.vote-count');
-        if (count > 0) {
-            badge.textContent = count;
-            badge.classList.remove('hidden');
-        } else {
-            badge.classList.add('hidden');
-        }
-    });
+socket.on('vote:update', ({ voteCount, requiredVotes }) => {
+    // Secret voting: only show progress, not who voted for whom
+    elements.actionHint.textContent = `${voteCount}/${requiredVotes} صوتوا`;
 });
 
 socket.on('vote:result', ({ eliminated, voteCounts, skipVotes }) => {

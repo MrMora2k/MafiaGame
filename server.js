@@ -408,7 +408,6 @@ io.on('connection', (socket) => {
         room.votes[socket.id] = targetId;
 
         io.to(socket.roomCode).emit('vote:update', {
-            votes: room.votes,
             voteCount: Object.keys(room.votes).length,
             requiredVotes: room.players.filter(p => p.alive).length
         });
@@ -430,7 +429,6 @@ io.on('connection', (socket) => {
         room.votes[socket.id] = 'skip';
 
         io.to(socket.roomCode).emit('vote:update', {
-            votes: room.votes,
             voteCount: Object.keys(room.votes).length,
             requiredVotes: room.players.filter(p => p.alive).length
         });
