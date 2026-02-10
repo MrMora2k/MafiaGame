@@ -612,11 +612,8 @@ function resolveDayVoting(room) {
     io.to(room.code).emit('vote:result', {
         eliminated: eliminatedPlayer ? {
             id: eliminatedPlayer.id,
-            name: eliminatedPlayer.name,
-            role: eliminatedPlayer.role
-        } : null,
-        voteCounts,
-        skipVotes
+            name: eliminatedPlayer.name
+        } : null
     });
 
     const winResult = checkWinCondition(room);

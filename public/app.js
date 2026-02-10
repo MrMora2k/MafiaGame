@@ -492,7 +492,14 @@ function handleSeatClick(seat) {
 
         socket.emit('night:action', { targetId });
 
-        elements.actionTitle.textContent = '✓ تم تأكيد الإجراء';
+        // Role-specific confirmation with target name
+        if (state.role === 'mafia') {
+            elements.actionTitle.textContent = `🔪 اخترت: ${targetPlayer.name}`;
+        } else if (state.role === 'doctor') {
+            elements.actionTitle.textContent = `💉 تحمي: ${targetPlayer.name}`;
+        } else if (state.role === 'detective') {
+            elements.actionTitle.textContent = `🔍 تحقق من: ${targetPlayer.name}`;
+        }
         elements.actionHint.textContent = 'في انتظار اللاعبين الآخرين...';
     } else if (state.phase === 'day') {
         state.selectedTarget = targetId;
@@ -503,7 +510,7 @@ function handleSeatClick(seat) {
 
         socket.emit('day:vote', { targetId });
 
-        elements.actionTitle.textContent = '✓ تم التصويت';
+        elements.actionTitle.textContent = `✓ صوّت على: ${targetPlayer.name}`;
         elements.actionHint.textContent = 'في انتظار الأصوات الأخرى...';
         elements.skipActionBtn.style.display = 'none';
     }
@@ -587,28 +594,16 @@ socket.on('vote:update', ({ voteCount, requiredVotes }) => {
     elements.actionHint.textContent = `${voteCount}/${requiredVotes} صوتوا`;
 });
 
-socket.on('vote:result', ({ eliminated, voteCounts, skipVotes }) => {
-    let breakdownHtml = '';
-
-    Object.entries(voteCounts).forEach(([playerId, count]) => {
-        const player = state.players.find(p => p.id === playerId);
-        if (player) {
-            breakdownHtml += `<div class="vote-breakdown-item"><span>${player.name}</span><span>${count} صوت</span></div>`;
-        }
-    });
-
-    if (skipVotes > 0) {
-        breakdownHtml += `<div class="vote-breakdown-item"><span>تخطي</span><span>${skipVotes} صوت</span></div>`;
-    }
-
-    elements.voteBreakdown.innerHTML = breakdownHtml;
+socket.on('vote:result', ({ eliminated }) => {
+    // No vote breakdown - results are secret
+    elements.voteBreakdown.innerHTML = '';
 
     if (eliminated) {
-        elements.voteResultTitle.textContent = 'إزالة';
-        elements.voteResultText.textContent = `${eliminated.name} تم إزالته. كان ${ROLE_INFO[eliminated.role].name}.`;
+        elements.voteResultTitle.textContent = '⚖️ قرار المدينة';
+        elements.voteResultText.textContent = `تم إخراج ${eliminated.name} من اللعبة.`;
     } else {
-        elements.voteResultTitle.textContent = 'لا إجماع';
-        elements.voteResultText.textContent = 'لم تتمكن المدينة من الاتفاق. لم يتم إزالة أحد.';
+        elements.voteResultTitle.textContent = 'لم يتم الاتفاق';
+        elements.voteResultText.textContent = 'لم يتمكن اللاعبون من الاتفاق على قرار موحد. لم يتم إخراج أحد.';
     }
 
     elements.voteModal.classList.remove('hidden');
