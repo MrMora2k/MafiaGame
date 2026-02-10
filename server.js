@@ -292,6 +292,13 @@ io.on('connection', (socket) => {
             return;
         }
 
+        // Re-assign player numbers sequentially to ensure valid order (1, 2, 3, 4...)
+        room.players.forEach((p, index) => {
+            p.playerNumber = index + 1;
+        });
+
+        console.log(`[DEBUG] Game Starting in Room ${socket.roomCode}. Player Numbers Assigned:`, room.players.map(p => `${p.name}: #${p.playerNumber}`));
+
         // Assign roles with settings
         room.players = assignRoles(room.players, room.settings);
         room.phase = PHASES.ROLE_REVEAL;
@@ -365,6 +372,12 @@ io.on('connection', (socket) => {
         const room = rooms.get(socket.roomCode);
         if (!room || room.phase !== PHASES.NIGHT) return;
 
+        // Turn check
+        if (room.currentTurnPlayerId !== socket.id) {
+            socket.emit('room:error', 'Not your turn!');
+            return;
+        }
+
         const player = room.players.find(p => p.id === socket.id);
         if (!player || !player.alive) return;
 
@@ -376,7 +389,7 @@ io.on('connection', (socket) => {
 
         room.nightActions[player.role] = room.nightActions[player.role] || [];
 
-        // Remove previous action from same player
+        // Remove previous action from same player (though in turn-based, they act once)
         room.nightActions[player.role] = room.nightActions[player.role].filter(a => a.actor !== socket.id);
 
         room.nightActions[player.role].push({
@@ -386,27 +399,34 @@ io.on('connection', (socket) => {
 
         socket.emit('night:actionConfirmed', { targetId });
 
-        checkNightComplete(room);
+        // Advance turn
+        advanceTurn(room);
     });
 
-    // Night skip (for citizens)
+    // Night skip (for anyone in their turn)
     socket.on('night:skip', () => {
         const room = rooms.get(socket.roomCode);
         if (!room || room.phase !== PHASES.NIGHT) return;
 
+        // Turn check
+        if (room.currentTurnPlayerId !== socket.id) {
+            socket.emit('room:error', 'Not your turn!');
+            return;
+        }
+
         const player = room.players.find(p => p.id === socket.id);
         if (!player || !player.alive) return;
 
-        // Only citizens can skip
-        if (player.role !== ROLES.CITIZEN) return;
+        // Any role acts or skips. Citizens usually skip.
+        // We just verify turn. Role logic is up to client UI mostly, 
+        // but we can enforce if needed. For now, allow skip.
 
-        // Mark this citizen as having acted
-        room.nightActions['citizenSkips'] = room.nightActions['citizenSkips'] || [];
-        if (!room.nightActions['citizenSkips'].includes(socket.id)) {
-            room.nightActions['citizenSkips'].push(socket.id);
-        }
+        // Mark as acted/skipped
+        room.nightActions['skips'] = room.nightActions['skips'] || [];
+        room.nightActions['skips'].push(socket.id);
 
-        checkNightComplete(room);
+        // Advance turn
+        advanceTurn(room);
     });
 
     // Day vote
@@ -414,20 +434,25 @@ io.on('connection', (socket) => {
         const room = rooms.get(socket.roomCode);
         if (!room || room.phase !== PHASES.DAY) return;
 
+        // Turn check
+        if (room.currentTurnPlayerId !== socket.id) {
+            socket.emit('room:error', 'Not your turn!');
+            return;
+        }
+
         const player = room.players.find(p => p.id === socket.id);
         if (!player || !player.alive) return;
 
         room.votes[socket.id] = targetId;
 
+        // Send vote update
         io.to(socket.roomCode).emit('vote:update', {
-            voteCount: Object.keys(room.votes).length,
-            requiredVotes: room.players.filter(p => p.alive).length
+            voterId: socket.id,
+            targetId: targetId
         });
 
-        const alivePlayers = room.players.filter(p => p.alive);
-        if (Object.keys(room.votes).length >= alivePlayers.length) {
-            resolveDayVoting(room);
-        }
+        // Advance turn
+        advanceTurn(room);
     });
 
     // Skip vote
@@ -435,20 +460,24 @@ io.on('connection', (socket) => {
         const room = rooms.get(socket.roomCode);
         if (!room || room.phase !== PHASES.DAY) return;
 
+        // Turn check
+        if (room.currentTurnPlayerId !== socket.id) {
+            socket.emit('room:error', 'Not your turn!');
+            return;
+        }
+
         const player = room.players.find(p => p.id === socket.id);
         if (!player || !player.alive) return;
 
         room.votes[socket.id] = 'skip';
 
         io.to(socket.roomCode).emit('vote:update', {
-            voteCount: Object.keys(room.votes).length,
-            requiredVotes: room.players.filter(p => p.alive).length
+            voterId: socket.id,
+            targetId: 'skip'
         });
 
-        const alivePlayers = room.players.filter(p => p.alive);
-        if (Object.keys(room.votes).length >= alivePlayers.length) {
-            resolveDayVoting(room);
-        }
+        // Advance turn
+        advanceTurn(room);
     });
 
     // Disconnect handling
@@ -479,6 +508,52 @@ function handlePlayerLeave(socket) {
     }
 }
 
+// Helper to get alive players sorted by playerNumber
+function getSortedAlivePlayers(room) {
+    return room.players
+        .filter(p => p.alive)
+        .sort((a, b) => a.playerNumber - b.playerNumber);
+}
+
+// Advance turn to the next player
+function advanceTurn(room) {
+    const sortedAlive = getSortedAlivePlayers(room);
+    const currentIndex = sortedAlive.findIndex(p => p.id === room.currentTurnPlayerId);
+
+    let nextPlayer = null;
+
+    if (currentIndex === -1) {
+        // Should not happen if logic is correct, but safe fallback to first
+        nextPlayer = sortedAlive[0];
+    } else if (currentIndex < sortedAlive.length - 1) {
+        nextPlayer = sortedAlive[currentIndex + 1];
+        console.log(`[DEBUG] Advancing turn to: ${nextPlayer.name} (#${nextPlayer.playerNumber})`);
+    } else {
+        // End of turns for this phase
+        console.log(`[DEBUG] Final player acted in phase ${room.phase}. Resolving phase...`);
+        room.currentTurnPlayerId = null;
+        io.to(room.code).emit('turn:change', { playerId: null });
+
+        if (room.phase === PHASES.NIGHT) {
+            resolveNight(room);
+        } else if (room.phase === PHASES.DAY) {
+            resolveDayVoting(room);
+        }
+        return;
+    }
+
+    if (nextPlayer) {
+        room.currentTurnPlayerId = nextPlayer.id;
+        io.to(room.code).emit('turn:change', {
+            playerId: nextPlayer.id,
+            playerNumber: nextPlayer.playerNumber,
+            name: nextPlayer.name
+        });
+
+        // Timer for turn? Optional. For now, manual.
+    }
+}
+
 // Start night phase
 function startNightPhase(room) {
     room.phase = PHASES.NIGHT;
@@ -486,29 +561,44 @@ function startNightPhase(room) {
     room.nightActions = {};
     room.players.forEach(p => p.ready = false);
 
+    // DEBUG: Log all players state
+    console.log(`[DEBUG] startNightPhase Room ${room.code} - Players Dump:`,
+        JSON.stringify(room.players.map(p => ({
+            id: p.id,
+            name: p.name,
+            playerNumber: p.playerNumber,
+            alive: p.alive,
+            role: p.role
+        })), null, 2)
+    );
+
+    // Initialize turn
+    const sortedAlive = getSortedAlivePlayers(room);
+    console.log(`[DEBUG] Night Play Order Room ${room.code}:`, sortedAlive.map(p => `${p.name}(#${p.playerNumber})`));
+
+    if (sortedAlive.length > 0) {
+        room.currentTurnPlayerId = sortedAlive[0].id;
+        console.log(`[DEBUG] First Turn: ${sortedAlive[0].name} (#${sortedAlive[0].playerNumber}) - ID: ${sortedAlive[0].id}`);
+    } else {
+        console.error('[DEBUG] No alive players found!');
+    }
+
     io.to(room.code).emit('phase:night', {
         dayNumber: room.dayNumber,
         players: room.players.map(p => ({ id: p.id, name: p.name, playerNumber: p.playerNumber, alive: p.alive })),
-        settings: room.settings
+        settings: room.settings,
+        currentTurn: sortedAlive.length > 0 ? {
+            playerId: sortedAlive[0].id,
+            playerNumber: sortedAlive[0].playerNumber,
+            name: sortedAlive[0].name
+        } : null
     });
 }
 
-// Check if all night actions are complete
+// Check if all night actions are complete - DEPRECATED in Turn-based, logic moved to advanceTurn
 function checkNightComplete(room) {
-    const alivePlayers = room.players.filter(p => p.alive);
-    const aliveMafia = alivePlayers.filter(p => p.role === ROLES.MAFIA);
-    const aliveDoctors = alivePlayers.filter(p => p.role === ROLES.DOCTOR);
-    const aliveDetectives = alivePlayers.filter(p => p.role === ROLES.DETECTIVE);
-    const aliveCitizens = alivePlayers.filter(p => p.role === ROLES.CITIZEN);
-
-    const mafiaActed = room.nightActions[ROLES.MAFIA]?.length >= aliveMafia.length;
-    const doctorsActed = aliveDoctors.length === 0 || room.nightActions[ROLES.DOCTOR]?.length >= aliveDoctors.length;
-    const detectivesActed = aliveDetectives.length === 0 || room.nightActions[ROLES.DETECTIVE]?.length >= aliveDetectives.length;
-    const citizensSkipped = aliveCitizens.length === 0 || (room.nightActions['citizenSkips']?.length >= aliveCitizens.length);
-
-    if (mafiaActed && doctorsActed && detectivesActed && citizensSkipped) {
-        resolveNight(room);
-    }
+    // In sequential mode, we don't check via this function anymore.
+    // The turn advancement handles completion.
 }
 
 // Resolve night actions
@@ -524,6 +614,8 @@ function resolveNight(room) {
             killVotes[action.target] = (killVotes[action.target] || 0) + 1;
         });
 
+        // In turn-based, Mafia technically vote sequentially.
+        // We still take the majority or the last one? Majority is fair.
         const targetId = Object.entries(killVotes).sort((a, b) => b[1] - a[1])[0]?.[0];
         if (targetId) {
             killedPlayer = room.players.find(p => p.id === targetId);
@@ -592,9 +684,25 @@ function startDayPhase(room) {
     room.phase = PHASES.DAY;
     room.votes = {};
 
+    // Initialize turn
+    const sortedAlive = getSortedAlivePlayers(room);
+    console.log(`[DEBUG] Day Play Order Room ${room.code}:`, sortedAlive.map(p => `${p.name}(#${p.playerNumber})`));
+
+    if (sortedAlive.length > 0) {
+        room.currentTurnPlayerId = sortedAlive[0].id;
+        console.log(`[DEBUG] Day First Turn: ${sortedAlive[0].name} (#${sortedAlive[0].playerNumber})`);
+    } else {
+        console.error('[DEBUG] No alive players for Day Phase!');
+    }
+
     io.to(room.code).emit('phase:day', {
         dayNumber: room.dayNumber,
-        players: room.players.map(p => ({ id: p.id, name: p.name, playerNumber: p.playerNumber, alive: p.alive }))
+        players: room.players.map(p => ({ id: p.id, name: p.name, playerNumber: p.playerNumber, alive: p.alive })),
+        currentTurn: sortedAlive.length > 0 ? {
+            playerId: sortedAlive[0].id,
+            playerNumber: sortedAlive[0].playerNumber,
+            name: sortedAlive[0].name
+        } : null
     });
 }
 

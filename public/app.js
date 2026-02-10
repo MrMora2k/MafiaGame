@@ -453,18 +453,21 @@ socket.on('player:readyUpdate', ({ readyCount, totalCount }) => {
 });
 
 // ==================== SOCKET EVENTS - NIGHT PHASE ====================
-socket.on('phase:night', ({ dayNumber, players, settings }) => {
+socket.on('phase:night', ({ dayNumber, players, settings, currentTurn }) => {
     state.players = players;
     state.phase = 'night';
     state.dayNumber = dayNumber;
     state.hasActed = false;
     state.selectedTarget = null;
+    state.currentTurn = currentTurn;
     if (settings) state.settings = settings;
 
     showPhaseTransition('night', dayNumber, () => {
         document.body.classList.remove('theme-day');
         elements.phaseBanner.innerHTML = `<span class="phase-icon">🌙</span><span class="phase-text">الليلة ${dayNumber}</span>`;
-        elements.skipActionBtn.style.display = 'none';
+        if (state.currentTurn) {
+            elements.phaseBanner.innerHTML += ` <span class="turn-indicator">| دور: ${state.currentTurn.name}</span>`;
+        }
 
         updateActionPanel();
         updateSpectatorUI();
@@ -473,34 +476,92 @@ socket.on('phase:night', ({ dayNumber, players, settings }) => {
     });
 });
 
+socket.on('turn:change', ({ playerId, playerNumber, name }) => {
+    state.currentTurn = playerId ? { playerId, playerNumber, name } : null;
+    state.hasActed = false; // Reset action state for new turn
+
+    // Update banner
+    const turnSpan = elements.phaseBanner.querySelector('.turn-indicator');
+    if (playerId && name) {
+        if (turnSpan) {
+            turnSpan.textContent = `| دور: ${name}`;
+        } else {
+            elements.phaseBanner.innerHTML += ` <span class="turn-indicator">| دور: ${name}</span>`;
+        }
+    } else if (turnSpan) {
+        turnSpan.remove(); // Remove indicator if turn is null
+    }
+
+    updateActionPanel();
+    renderSeats();
+});
+
 function updateActionPanel() {
     const role = state.role;
     const phase = state.phase;
+    const isMyTurn = state.currentTurn && state.currentTurn.playerId === state.playerId;
+    const isAlive = state.players.find(p => p.id === state.playerId)?.alive;
+
+    // DEBUG: Check turn logic
+    console.log('[DEBUG] Action Panel Update:', {
+        myId: state.playerId,
+        turnPlayer: state.currentTurn,
+        isMyTurn: isMyTurn,
+        phase: phase,
+        role: role
+    });
+
+    elements.actionHint.style.color = '';
+
+    if (!isAlive) {
+        elements.actionTitle.textContent = '💀 أنت ميت';
+        elements.actionHint.textContent = 'شاهد اللعبة واستمتع.';
+        elements.skipActionBtn.style.display = 'none';
+        return;
+    }
+
+    if (!isMyTurn) {
+        const turnPlayerName = state.currentTurn ? state.currentTurn.name : 'انتظر...';
+        const turnPlayerNum = state.currentTurn ? state.currentTurn.playerNumber : '?';
+        const myPlayerNum = state.players.find(p => p.id === state.playerId)?.playerNumber;
+
+        elements.actionTitle.textContent = `⏳ دور: ${turnPlayerName} (#${turnPlayerNum})`;
+        elements.actionHint.textContent = `أنت اللاعب رقم (#${myPlayerNum}). بانتظار دورك...`;
+        elements.skipActionBtn.style.display = 'none';
+        return;
+    }
+
+    elements.actionTitle.textContent = '🟢 دورك الآن!';
+    elements.skipActionBtn.style.display = 'none';
 
     if (phase === 'night') {
         if (role === 'mafia') {
-            elements.actionTitle.textContent = '🔪 اختر ضحيتك';
-            elements.actionHint.textContent = 'اختر لاعباً لإزالته الليلة';
-            elements.skipActionBtn.style.display = 'none';
+            elements.actionTitle.textContent = '🔪 دورك: اختر ضحيتك';
+            elements.actionHint.textContent = 'اختر لاعباً لإزالته';
         } else if (role === 'doctor') {
             const selfHealText = state.settings.doctorSelfHeal ? ' (يمكنك حماية نفسك)' : '';
-            elements.actionTitle.textContent = '💉 أنقذ شخصاً';
-            elements.actionHint.textContent = 'اختر لاعباً لحمايته من المافيا' + selfHealText;
-            elements.skipActionBtn.style.display = 'none';
+            elements.actionTitle.textContent = '💉 دورك: أنقذ شخصاً';
+            elements.actionHint.textContent = 'اختر لاعباً لحمايته' + selfHealText;
+            // Doctor can skip/sleep if they want to do nothing
+            elements.skipActionBtn.style.display = 'inline-block';
+            elements.skipActionBtn.textContent = 'تخطي (لا تفعل شيئاً)';
         } else if (role === 'detective') {
-            elements.actionTitle.textContent = '🔍 حقق';
-            elements.actionHint.textContent = 'اختر لاعباً لاكتشاف هويته الحقيقية';
-            elements.skipActionBtn.style.display = 'none';
+            elements.actionTitle.textContent = '🔍 دورك: حقق';
+            elements.actionHint.textContent = 'اختر لاعباً لكشفه';
+            // Detective can skip? Usually no, but let's allow "End Turn" without action if they really want? 
+            // Better to force action or show Skip. Let's show Skip.
+            elements.skipActionBtn.style.display = 'inline-block';
+            elements.skipActionBtn.textContent = 'تخطي';
         } else {
-            // Citizen - show skip button
-            elements.actionTitle.textContent = '💤 الليل مظلم...';
-            elements.actionHint.textContent = 'انتظر الفجر أو اضغط تخطي للمتابعة';
+            // Citizen
+            elements.actionTitle.textContent = '💤 دورك: لا يوجد إجراء';
+            elements.actionHint.textContent = 'اضغط تخطي لإنهاء دورك';
             elements.skipActionBtn.style.display = 'inline-block';
             elements.skipActionBtn.textContent = 'تخطي ⏭️';
         }
     } else if (phase === 'day') {
-        elements.actionTitle.textContent = '⚖️ وقت التصويت';
-        elements.actionHint.textContent = 'ناقش وصوّت لإزالة المشتبه به';
+        elements.actionTitle.textContent = '⚖️ دورك: وقت التصويت';
+        elements.actionHint.textContent = 'ناقش، صوّت، أو تخطى';
         elements.skipActionBtn.style.display = 'inline-block';
         elements.skipActionBtn.textContent = 'تخطي التصويت';
     }
@@ -512,17 +573,19 @@ function renderSeats() {
 
     elements.seatsContainer.innerHTML = players.map((player, index) => {
         const angle = (360 / count) * index - 90;
-        const playerNum = player.playerNumber || (index + 1);
+        const playerNum = player.playerNumber;
         const isSelf = player.id === state.playerId;
         const isDead = !player.alive;
         const isSelected = state.selectedTarget === player.id;
         const isTeammate = state.teammates && state.teammates.some(t => t.id === player.id);
+        const isCurrentTurn = state.currentTurn && state.currentTurn.playerId === player.id;
 
         let classes = 'player-seat';
         if (isSelf) classes += ' self';
         if (isDead) classes += ' dead';
         if (isSelected) classes += ' selected';
         if (isTeammate) classes += ' teammate';
+        if (isCurrentTurn) classes += ' current-turn';
 
         // Show role image for self, player number for others
         const avatarContent = isSelf
@@ -555,13 +618,17 @@ function handleSeatClick(seat) {
 
     // Check if clicking on self
     if (targetId === state.playerId) {
-        // Doctor can heal self if setting allows
+        // Doctor can heal self if setting allows AND it is their turn
         if (state.phase === 'night' && state.role === 'doctor' && state.settings.doctorSelfHeal) {
             // Allow self-heal
+            if (!state.currentTurn || state.currentTurn.playerId !== state.playerId) return;
         } else {
             return;
         }
     }
+
+    // Turn Check
+    if (state.currentTurn && state.currentTurn.playerId !== state.playerId) return;
 
     if (state.phase === 'night') {
         if (state.role === 'citizen') return;
@@ -664,16 +731,20 @@ elements.nightContinueBtn.addEventListener('click', () => {
 });
 
 // ==================== SOCKET EVENTS - DAY PHASE ====================
-socket.on('phase:day', ({ dayNumber, players }) => {
+socket.on('phase:day', ({ dayNumber, players, currentTurn }) => {
     state.players = players;
     state.phase = 'day';
     state.dayNumber = dayNumber;
     state.hasActed = false;
     state.selectedTarget = null;
+    state.currentTurn = currentTurn;
 
     showPhaseTransition('day', dayNumber, () => {
         document.body.classList.add('theme-day');
         elements.phaseBanner.innerHTML = `<span class="phase-icon">☀️</span><span class="phase-text">اليوم ${dayNumber}</span>`;
+        if (state.currentTurn && state.currentTurn.name) {
+            elements.phaseBanner.innerHTML += ` <span class="turn-indicator">| دور: ${state.currentTurn.name}</span>`;
+        }
 
         updateActionPanel();
         updateSpectatorUI();
