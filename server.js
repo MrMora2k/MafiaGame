@@ -129,6 +129,18 @@ function checkWinCondition(room) {
     return null;
 }
 
+// Get role stats for round summary
+function getRoleStats(room) {
+    const alive = room.players.filter(p => p.alive);
+    return {
+        total: alive.length,
+        mafia: alive.filter(p => p.role === ROLES.MAFIA).length,
+        doctor: alive.filter(p => p.role === ROLES.DOCTOR).length,
+        detective: alive.filter(p => p.role === ROLES.DETECTIVE).length,
+        citizen: alive.filter(p => p.role === ROLES.CITIZEN).length
+    };
+}
+
 // Reset room for new game
 function resetRoomForNewGame(room) {
     room.phase = PHASES.LOBBY;
@@ -548,10 +560,12 @@ function resolveNight(room) {
         killedPlayer.alive = false;
     }
 
-    // Send night results
+    // Send night results with role stats
     io.to(room.code).emit('night:result', {
         killed: killedPlayer ? { id: killedPlayer.id, name: killedPlayer.name } : null,
-        saved: savedPlayer ? true : false
+        saved: savedPlayer ? true : false,
+        roleStats: getRoleStats(room),
+        dayNumber: room.dayNumber
     });
 
     // Send investigation results to each detective
@@ -613,7 +627,9 @@ function resolveDayVoting(room) {
         eliminated: eliminatedPlayer ? {
             id: eliminatedPlayer.id,
             name: eliminatedPlayer.name
-        } : null
+        } : null,
+        roleStats: getRoleStats(room),
+        dayNumber: room.dayNumber
     });
 
     const winResult = checkWinCondition(room);

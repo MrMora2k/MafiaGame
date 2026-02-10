@@ -103,7 +103,17 @@ const elements = {
     finalPlayerList: document.getElementById('final-player-list'),
     playAgainBtn: document.getElementById('play-again-btn'),
     leaveGameBtn: document.getElementById('leave-game-btn'),
-    copyCodeBtn: document.getElementById('copy-code-btn')
+    copyCodeBtn: document.getElementById('copy-code-btn'),
+    phaseTransition: document.getElementById('phase-transition'),
+    phaseTransitionIcon: document.getElementById('phase-transition-icon'),
+    phaseTransitionText: document.getElementById('phase-transition-text'),
+    spectatorBanner: document.getElementById('spectator-banner'),
+    eventLogToggle: document.getElementById('event-log-toggle'),
+    eventLog: document.getElementById('event-log'),
+    eventLogContent: document.getElementById('event-log-content'),
+    closeEventLog: document.getElementById('close-event-log'),
+    nightRoundSummary: document.getElementById('night-round-summary'),
+    voteRoundSummary: document.getElementById('vote-round-summary')
 };
 
 // ==================== INITIALIZE ====================
@@ -116,6 +126,75 @@ function init() {
     }
 }
 init();
+
+// ==================== EVENT LOG ====================
+const eventHistory = [];
+
+function addEvent(type, text, dayNumber) {
+    eventHistory.push({ type, text, dayNumber });
+    const entry = document.createElement('div');
+    entry.className = `event-entry ${type}`;
+    entry.innerHTML = `
+        <div class="event-entry-header">الجولة ${dayNumber} — ${type === 'night' ? '🌙 ليل' : type === 'day' ? '☀️ نهار' : type === 'death' ? '💀 وفاة' : '✅ نجاة'}</div>
+        <div class="event-entry-text">${text}</div>
+    `;
+    elements.eventLogContent.prepend(entry);
+}
+
+// Event log toggle
+elements.eventLogToggle.addEventListener('click', () => {
+    elements.eventLog.classList.toggle('hidden');
+});
+
+elements.closeEventLog.addEventListener('click', () => {
+    elements.eventLog.classList.add('hidden');
+});
+
+// ==================== PHASE TRANSITION ====================
+function showPhaseTransition(phase, dayNumber, callback) {
+    const overlay = elements.phaseTransition;
+    overlay.className = `phase-transition ${phase === 'night' ? 'night-transition' : 'day-transition'}`;
+    elements.phaseTransitionIcon.textContent = phase === 'night' ? '🌙' : '☀️';
+    elements.phaseTransitionText.textContent = phase === 'night' ? `الليلة ${dayNumber}` : `اليوم ${dayNumber}`;
+
+    // Show overlay
+    overlay.classList.remove('hidden');
+
+    // After animation plays, fade out and run callback
+    setTimeout(() => {
+        overlay.classList.add('fade-out');
+        setTimeout(() => {
+            overlay.classList.add('hidden');
+            overlay.classList.remove('fade-out');
+            if (callback) callback();
+        }, 600);
+    }, 1800);
+}
+
+// ==================== ROUND SUMMARY ====================
+function renderRoundSummary(container, roleStats) {
+    container.innerHTML = `
+        <div class="round-summary-title">اللاعبون المتبقون: ${roleStats.total}</div>
+        <div class="round-summary-stats">
+            <div class="stat-badge mafia">🔪 مافيا <span class="stat-count">${roleStats.mafia}</span></div>
+            <div class="stat-badge doctor">💉 طبيب <span class="stat-count">${roleStats.doctor}</span></div>
+            <div class="stat-badge detective">🔍 محقق <span class="stat-count">${roleStats.detective}</span></div>
+            <div class="stat-badge citizen">👤 مواطن <span class="stat-count">${roleStats.citizen}</span></div>
+        </div>
+    `;
+}
+
+// ==================== SPECTATOR MODE ====================
+function updateSpectatorUI() {
+    const myPlayer = state.players.find(p => p.id === state.playerId);
+    if (myPlayer && !myPlayer.alive) {
+        elements.actionPanel.classList.add('hidden');
+        elements.spectatorBanner.classList.remove('hidden');
+    } else {
+        elements.actionPanel.classList.remove('hidden');
+        elements.spectatorBanner.classList.add('hidden');
+    }
+}
 
 // ==================== SCREEN NAVIGATION ====================
 function showScreen(screenName) {
@@ -382,13 +461,16 @@ socket.on('phase:night', ({ dayNumber, players, settings }) => {
     state.selectedTarget = null;
     if (settings) state.settings = settings;
 
-    document.body.classList.remove('theme-day');
-    elements.phaseBanner.innerHTML = `<span class="phase-icon">🌙</span><span class="phase-text">الليلة ${dayNumber}</span>`;
-    elements.skipActionBtn.style.display = 'none';
+    showPhaseTransition('night', dayNumber, () => {
+        document.body.classList.remove('theme-day');
+        elements.phaseBanner.innerHTML = `<span class="phase-icon">🌙</span><span class="phase-text">الليلة ${dayNumber}</span>`;
+        elements.skipActionBtn.style.display = 'none';
 
-    updateActionPanel();
-    renderSeats();
-    showScreen('game');
+        updateActionPanel();
+        updateSpectatorUI();
+        renderSeats();
+        showScreen('game');
+    });
 });
 
 function updateActionPanel() {
@@ -555,16 +637,23 @@ elements.detectiveContinueBtn.addEventListener('click', () => {
     elements.detectiveModal.classList.add('hidden');
 });
 
-socket.on('night:result', ({ killed, saved }) => {
+socket.on('night:result', ({ killed, saved, roleStats, dayNumber }) => {
     if (killed) {
         elements.nightResultTitle.textContent = 'مأساة عند الفجر';
         elements.nightResultText.textContent = `${killed.name} وُجد ميتاً هذا الصباح. المافيا ضربت.`;
+        addEvent('death', `💀 ${killed.name} قُتل على يد المافيا`, dayNumber);
     } else if (saved) {
         elements.nightResultTitle.textContent = 'معجزة!';
         elements.nightResultText.textContent = 'الطبيب أنقذ شخصاً من هجوم المافيا الليلة الماضية!';
+        addEvent('safe', '💉 الطبيب أنقذ أحد اللاعبين من الموت', dayNumber);
     } else {
         elements.nightResultTitle.textContent = 'ليلة هادئة';
         elements.nightResultText.textContent = 'استيقظت المدينة لتجد الجميع بخير.';
+        addEvent('night', '🌙 ليلة هادئة — لم يُقتل أحد', dayNumber);
+    }
+
+    if (roleStats) {
+        renderRoundSummary(elements.nightRoundSummary, roleStats);
     }
 
     elements.nightModal.classList.remove('hidden');
@@ -582,11 +671,14 @@ socket.on('phase:day', ({ dayNumber, players }) => {
     state.hasActed = false;
     state.selectedTarget = null;
 
-    document.body.classList.add('theme-day');
-    elements.phaseBanner.innerHTML = `<span class="phase-icon">☀️</span><span class="phase-text">اليوم ${dayNumber}</span>`;
+    showPhaseTransition('day', dayNumber, () => {
+        document.body.classList.add('theme-day');
+        elements.phaseBanner.innerHTML = `<span class="phase-icon">☀️</span><span class="phase-text">اليوم ${dayNumber}</span>`;
 
-    updateActionPanel();
-    renderSeats();
+        updateActionPanel();
+        updateSpectatorUI();
+        renderSeats();
+    });
 });
 
 socket.on('vote:update', ({ voteCount, requiredVotes }) => {
@@ -594,16 +686,22 @@ socket.on('vote:update', ({ voteCount, requiredVotes }) => {
     elements.actionHint.textContent = `${voteCount}/${requiredVotes} صوتوا`;
 });
 
-socket.on('vote:result', ({ eliminated }) => {
+socket.on('vote:result', ({ eliminated, roleStats, dayNumber }) => {
     // No vote breakdown - results are secret
     elements.voteBreakdown.innerHTML = '';
 
     if (eliminated) {
         elements.voteResultTitle.textContent = '⚖️ قرار المدينة';
         elements.voteResultText.textContent = `تم إخراج ${eliminated.name} من اللعبة.`;
+        addEvent('day', `⚖️ ${eliminated.name} أُخرج بالتصويت`, dayNumber);
     } else {
         elements.voteResultTitle.textContent = 'لم يتم الاتفاق';
         elements.voteResultText.textContent = 'لم يتمكن اللاعبون من الاتفاق على قرار موحد. لم يتم إخراج أحد.';
+        addEvent('day', '🤷 لم يتفق اللاعبون — لم يُخرج أحد', dayNumber);
+    }
+
+    if (roleStats) {
+        renderRoundSummary(elements.voteRoundSummary, roleStats);
     }
 
     elements.voteModal.classList.remove('hidden');

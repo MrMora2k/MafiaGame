@@ -19,7 +19,9 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Tajawal:wght@400;500;700;800&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -212,6 +214,14 @@
             </div>
         </section>
 
+        <!-- Phase Transition Overlay -->
+        <div class="phase-transition hidden" id="phase-transition">
+            <div class="phase-transition-content">
+                <div class="phase-transition-icon" id="phase-transition-icon">🌙</div>
+                <div class="phase-transition-text" id="phase-transition-text">الليل يحل...</div>
+            </div>
+        </div>
+
         <!-- ==================== GAME SCREEN (ROUND TABLE) ==================== -->
         <section id="game-screen" class="screen">
             <!-- Phase Indicator -->
@@ -231,7 +241,7 @@
                 </div>
             </div>
 
-            <!-- Action Panel -->
+            <!-- Action Panel (alive players) -->
             <div class="action-panel" id="action-panel">
                 <div class="action-title" id="action-title">اختر لاعباً</div>
                 <div class="action-hint" id="action-hint">اضغط على لاعب حول الطاولة لتنفيذ إجراءك
@@ -239,11 +249,28 @@
                 <button class="btn btn-secondary" id="skip-action-btn" style="display: none;">تخطي التصويت</button>
             </div>
 
+            <!-- Spectator Banner (dead players) -->
+            <div class="spectator-banner hidden" id="spectator-banner">
+                <span class="spectator-icon">👻</span>
+                <span class="spectator-text">أنت متوفى — تشاهد اللعبة كمراقب</span>
+            </div>
+
+            <!-- Event Log Panel -->
+            <div class="event-log-toggle" id="event-log-toggle">📜 سجل الأحداث</div>
+            <div class="event-log hidden" id="event-log">
+                <div class="event-log-header">
+                    <h3>📜 سجل الأحداث</h3>
+                    <button class="btn btn-small" id="close-event-log">✕</button>
+                </div>
+                <div class="event-log-content" id="event-log-content"></div>
+            </div>
+
             <!-- Night Result Modal -->
             <div class="modal hidden" id="night-modal">
                 <div class="modal-content">
                     <h2 id="night-result-title">طلوع الفجر</h2>
                     <p id="night-result-text"></p>
+                    <div class="round-summary" id="night-round-summary"></div>
                     <button class="btn btn-primary" id="night-continue-btn">متابعة</button>
                 </div>
             </div>
@@ -269,6 +296,7 @@
                     <h2 id="vote-result-title">قرار المدينة</h2>
                     <p id="vote-result-text"></p>
                     <div class="vote-breakdown" id="vote-breakdown"></div>
+                    <div class="round-summary" id="vote-round-summary"></div>
                     <button class="btn btn-primary" id="vote-continue-btn">متابعة</button>
                 </div>
             </div>
