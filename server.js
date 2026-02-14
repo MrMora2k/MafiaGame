@@ -827,26 +827,36 @@ function resolveDayVoting(room) {
 
 // Resolve game over and award XP
 async function resolveGameOver(room, result) {
-    room.phase = PHASES.GAMEOVER;
+    room.phase = PHASES.GAME_OVER; // Fixed enum key
     room.currentTurnPlayerId = null;
+
+    console.log(`[GAME] Resolving Game Over for room ${room.code}. Winner: ${result.winner}`);
 
     // Award XP and update stats for each player
     const updates = room.players.map(async (player) => {
         // Find if they are logged in via socket.userId
         const socket = Array.from(io.sockets.sockets.values()).find(s => s.id === player.id);
-        const userId = socket ? socket.userId : null;
 
-        if (!userId) return;
+        if (!socket || !socket.userId) return;
 
-        const isWinner = (result.winningRole === 'mafia' && player.role === ROLES.MAFIA) ||
-            (result.winningRole === 'town' && player.role !== ROLES.MAFIA);
+        const isWinner = (result.winningRole === 'town' && player.role !== ROLES.MAFIA) ||
+            (result.winningRole === 'mafia' && player.role === ROLES.MAFIA);
 
         const xpEarned = isWinner ? 50 : 10;
 
         try {
-            await DB.updateGameStats(userId, xpEarned, isWinner);
+            const newStats = await DB.updateGameStats(socket.userId, xpEarned, isWinner);
+            console.log(`[XP] Updated stats for ${player.name}: +${xpEarned} XP (Total: ${newStats.newXp}, Lvl: ${newStats.newLevel})`);
+
+            // Send private progression update
+            io.to(player.id).emit('player:progression', {
+                xpEarned,
+                newXp: newStats.newXp,
+                newLevel: newStats.newLevel,
+                isWinner
+            });
         } catch (err) {
-            console.error(`Failed to update stats for user ${userId}:`, err);
+            console.error(`Failed to update stats for user ${socket.userId}:`, err);
         }
     });
 
@@ -862,8 +872,6 @@ async function resolveGameOver(room, result) {
             alive: p.alive
         }))
     });
-
-    console.log(`Game Over in room ${room.code}. Winner: ${result.winner}`);
 }
 
 // Start server

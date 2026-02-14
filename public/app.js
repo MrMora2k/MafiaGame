@@ -55,6 +55,7 @@ const elements = {
     roleScreen: document.getElementById('role-screen'),
     gameScreen: document.getElementById('game-screen'),
     gameoverScreen: document.getElementById('gameover-screen'),
+    progressionSummary: document.getElementById('progression-summary'),
     createName: document.getElementById('create-name'),
     joinName: document.getElementById('join-name'),
     roomCodeInput: document.getElementById('room-code'),
@@ -485,6 +486,11 @@ function showError(message) {
 
 // ==================== SOCKET EVENTS SETUP ====================
 function setupSocketEvents() {
+    // Progression update
+    socket.on('player:progression', (data) => {
+        handleProgression(data);
+    });
+
     socket.on('connect', () => {
         console.log('Connected to server');
     });
@@ -494,6 +500,11 @@ function setupSocketEvents() {
     });
 
     socket.on('error', (message) => showError(message));
+
+    // Progression update
+    socket.on('player:progression', (data) => {
+        handleProgression(data);
+    });
 
     // ==================== SOCKET EVENTS - LOBBY ====================
     socket.on('room:created', ({ roomCode, players, settings }) => {
@@ -1094,5 +1105,70 @@ safeAddEvent(elements.authPassword, 'keypress', e => { if (e.key === 'Enter') el
 console.log('🎭 Mafia Game Client Loaded Successfully');
 console.log('--- Mafia App Script Execution Completed ---');
 
+function handleProgression(data) {
+    if (!state.user) return;
+
+    // Check for level up before updating state
+    const isLevelUp = data.newLevel > (state.user.level || 1);
+
+    // Update local state
+    state.user.total_xp = data.newXp;
+    state.user.level = data.newLevel;
+    updateProfileUI();
+
+    // Show sequence in Game Over screen
+    if (elements.progressionSummary) {
+        elements.progressionSummary.innerHTML = '';
+        elements.progressionSummary.classList.add('visible');
+
+        // XP Gain
+        const xpEl = document.createElement('div');
+        xpEl.className = 'xp-gain';
+        xpEl.innerHTML = `<span class="icon">✨</span> <span>+${data.xpEarned} XP</span>`;
+        elements.progressionSummary.appendChild(xpEl);
+
+        // Level Up Animation
+        if (isLevelUp) {
+            const lvlEl = document.createElement('div');
+            lvlEl.className = 'level-up-message';
+            lvlEl.innerHTML = `🎉 مستوى جديد: ${data.newLevel}!`;
+            elements.progressionSummary.appendChild(lvlEl);
+        }
+    }
+}
+
 // Start the application
 init();
+
+// Corrected Progression Handler (Overrides previous definition)
+function handleProgression(data) {
+    if (!state.user) return;
+
+    // Check for level up before updating state
+    const isLevelUp = data.newLevel > (state.user.level || 1);
+
+    // Update local state
+    state.user.total_xp = data.newXp;
+    state.user.level = data.newLevel;
+    updateProfileUI();
+
+    // Show sequence in Game Over screen
+    if (elements.progressionSummary) {
+        elements.progressionSummary.innerHTML = '';
+        elements.progressionSummary.classList.add('visible');
+
+        // XP Gain
+        const xpEl = document.createElement('div');
+        xpEl.className = 'xp-gain';
+        xpEl.innerHTML = `<span class="icon">✨</span> <span>+${data.xpEarned} XP</span>`;
+        elements.progressionSummary.appendChild(xpEl);
+
+        // Level Up Animation
+        if (isLevelUp) {
+            const lvlEl = document.createElement('div');
+            lvlEl.className = 'level-up-message';
+            lvlEl.innerHTML = `🎉 مستوى جديد: ${data.newLevel}!`;
+            elements.progressionSummary.appendChild(lvlEl);
+        }
+    }
+}
