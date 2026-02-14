@@ -46,284 +46,356 @@
                 <div class="particle"></div>
             </div>
         </div>
+        <!-- Main Game Content -->
+        <main class="main-content">
+            <!-- ==================== AUTH SCREEN ==================== -->
+            <section id="auth-screen" class="screen active">
+                <div class="auth-box">
+                    <div class="game-logo">
+                        <h1 class="game-title">🎭 مافيا</h1>
+                        <p class="game-subtitle">سجل دخولك للطاولة المستديرة</p>
+                    </div>
 
-        <!-- ==================== LOBBY SCREEN ==================== -->
-        <section id="lobby-screen" class="screen active">
-            <div class="lobby-container">
-                <header class="lobby-header">
-                    <h1 class="game-title">🎭 مافيا</h1>
-                    <p class="game-subtitle">نسخة الطاولة المستديرة</p>
-                </header>
+                    <div class="auth-tabs">
+                        <button class="auth-tab active" id="tab-login">دخول</button>
+                        <button class="auth-tab" id="tab-register">تسجيل</button>
+                    </div>
 
-                <!-- Create/Join/Browse Toggle -->
-                <div class="lobby-tabs">
-                    <button class="tab-btn active" data-tab="create">إنشاء غرفة</button>
-                    <button class="tab-btn" data-tab="join">الانضمام</button>
-                    <button class="tab-btn" data-tab="browse">الغرف المتاحة</button>
+                    <form id="auth-form" class="auth-form-box">
+                        <div class="input-group">
+                            <label>اسم المستخدم</label>
+                            <input type="text" id="auth-username" required placeholder="ادخل اسمك هنا..."
+                                autocomplete="username">
+                        </div>
+                        <div class="input-group">
+                            <label>كلمة المرور</label>
+                            <input type="password" id="auth-password" required placeholder="******"
+                                autocomplete="current-password">
+                        </div>
+                        <button type="submit" id="auth-submit-btn" class="btn btn-primary w-full">دخول</button>
+                    </form>
+
+                    <p id="auth-error" class="error-message hidden"></p>
                 </div>
+            </section>
 
-                <!-- Create Room Form -->
-                <div class="lobby-form" id="create-form">
-                    <div class="input-group">
-                        <label for="create-name">اسمك</label>
-                        <input type="text" id="create-name" placeholder="أدخل اسمك" maxlength="15" autocomplete="off">
-                    </div>
-                    <button class="btn btn-primary" id="create-btn">إنشاء اللعبة</button>
-                </div>
+            <!-- ==================== LOBBY SCREEN ==================== -->
+            <section id="lobby-screen" class="screen">
+                <div class="lobby-container">
+                    <header class="lobby-header">
+                        <div class="header-left">
+                            <h1 class="game-title-small">🎭 مافيا</h1>
+                        </div>
+                        <div class="header-right">
+                            <button class="btn btn-icon-text" id="profile-btn">
+                                <span class="icon">👤</span>
+                                <span id="header-username">اسم المستخدم</span>
+                            </button>
+                            <button class="btn btn-icon-text" id="header-logout-btn" title="تسجيل الخروج">
+                                <span class="icon">🚪</span>
+                            </button>
+                        </div>
+                    </header>
 
-                <!-- Join Room Form -->
-                <div class="lobby-form hidden" id="join-form">
-                    <div class="input-group">
-                        <label for="join-name">اسمك</label>
-                        <input type="text" id="join-name" placeholder="أدخل اسمك" maxlength="15" autocomplete="off">
+                    <!-- Create/Join/Browse Toggle -->
+                    <div class="lobby-tabs">
+                        <button class="tab-btn active" data-tab="create">إنشاء غرفة</button>
+                        <button class="tab-btn" data-tab="join">الانضمام</button>
+                        <button class="tab-btn" data-tab="browse">الغرف المتاحة</button>
                     </div>
-                    <div class="input-group">
-                        <label for="room-code">كود الغرفة</label>
-                        <input type="text" id="room-code" placeholder="XXXXXX" maxlength="6" autocomplete="off"
-                            style="text-transform: uppercase;">
-                    </div>
-                    <button class="btn btn-primary" id="join-btn">انضمام</button>
-                </div>
 
-                <!-- Error Message -->
-                <div class="error-message hidden" id="lobby-error"></div>
-
-                <!-- Browse Public Rooms -->
-                <div class="lobby-form hidden" id="browse-form">
-                    <div class="input-group">
-                        <label for="browse-name">اسمك</label>
-                        <input type="text" id="browse-name" placeholder="أدخل اسمك" maxlength="15" autocomplete="off">
+                    <!-- Create Room Form -->
+                    <div class="lobby-form" id="create-form">
+                        <button class="btn btn-primary btn-large" id="create-btn">بدء غرفة جديدة 🚀</button>
                     </div>
-                    <div class="public-rooms-list">
-                        <h3>🌐 الغرف العامة المتاحة</h3>
-                        <button class="btn btn-small" id="refresh-rooms-btn">تحديث 🔄</button>
-                        <div id="rooms-list" class="rooms-list">
-                            <p class="no-rooms">لا توجد غرف متاحة حالياً</p>
+
+                    <!-- Join Room Form -->
+                    <div class="lobby-form hidden" id="join-form">
+                        <div class="input-group">
+                            <label for="room-code">كود الغرفة</label>
+                            <input type="text" id="room-code" placeholder="XXXXXX" maxlength="6" autocomplete="off"
+                                style="text-transform: uppercase; text-align: center; font-size: 2rem; letter-spacing: 0.5rem;">
+                        </div>
+                        <button class="btn btn-primary w-full" id="join-btn">انضمام الآن</button>
+                    </div>
+
+                    <!-- Browse Public Rooms -->
+                    <div class="lobby-form hidden" id="browse-form">
+                        <div class="public-rooms-list">
+                            <div class="list-header">
+                                <h3>🌐 الغرف العامة</h3>
+                                <button class="btn btn-small" id="refresh-rooms-btn">تحديث 🔄</button>
+                            </div>
+                            <div id="rooms-list" class="rooms-list">
+                                <p class="no-rooms">لا توجد غرف متاحة حالياً</p>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </section>
 
-        <!-- ==================== WAITING ROOM ==================== -->
-        <section id="waiting-screen" class="screen">
-            <div class="waiting-container">
-                <div class="room-info">
-                    <h2>كود الغرفة</h2>
-                    <div class="room-code-display" id="display-room-code">------</div>
-                    <button class="btn btn-small" id="copy-code-btn">نسخ الكود</button>
+                    <!-- Error Message -->
+                    <div class="error-message hidden" id="lobby-error"></div>
                 </div>
+            </section>
 
-                <div class="players-waiting">
-                    <h3>اللاعبون (<span id="player-count">0</span>/<span id="max-players">12</span>)</h3>
-                    <ul class="player-list" id="player-list"></ul>
-                    <p class="min-players-note">يجب وجود 4 لاعبين على الأقل للبدء</p>
-                </div>
+            <!-- ==================== WAITING ROOM ==================== -->
+            <section id="waiting-screen" class="screen">
+                <div class="waiting-container">
+                    <div class="room-info">
+                        <h2>كود الغرفة</h2>
+                        <div class="room-code-display" id="display-room-code">------</div>
+                        <button class="btn btn-small" id="copy-code-btn">نسخ الكود</button>
+                    </div>
 
-                <!-- Settings Panel (Host Only) -->
-                <div class="settings-panel hidden" id="settings-panel">
-                    <h3>⚙️ إعدادات اللعبة</h3>
-                    <div class="settings-grid">
-                        <div class="setting-item">
-                            <label>أقصى عدد لاعبين</label>
-                            <select id="setting-max-players">
-                                <option value="4">4</option>
-                                <option value="6">6</option>
-                                <option value="8">8</option>
-                                <option value="10">10</option>
-                                <option value="12" selected>12</option>
-                                <option value="14">14</option>
-                                <option value="16">16</option>
-                                <option value="18">18</option>
-                                <option value="20">20</option>
-                            </select>
+                    <div class="players-waiting">
+                        <h3>اللاعبون (<span id="player-count">0</span>/<span id="max-players">12</span>)</h3>
+                        <ul class="player-list" id="player-list"></ul>
+                        <p class="min-players-note">يجب وجود 4 لاعبين على الأقل للبدء</p>
+                    </div>
+
+                    <!-- Settings Panel (Host Only) -->
+                    <div class="settings-panel hidden" id="settings-panel">
+                        <h3>⚙️ إعدادات اللعبة</h3>
+                        <div class="settings-grid">
+                            <div class="setting-item">
+                                <label>أقصى عدد لاعبين</label>
+                                <select id="setting-max-players">
+                                    <option value="4">4</option>
+                                    <option value="6">6</option>
+                                    <option value="8">8</option>
+                                    <option value="10">10</option>
+                                    <option value="12" selected>12</option>
+                                    <option value="14">14</option>
+                                    <option value="16">16</option>
+                                    <option value="18">18</option>
+                                    <option value="20">20</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <label>عدد المافيا</label>
+                                <select id="setting-mafia">
+                                    <option value="0">تلقائي</option>
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <label>عدد الأطباء</label>
+                                <select id="setting-doctors">
+                                    <option value="0">0</option>
+                                    <option value="1" selected>1</option>
+                                    <option value="2">2</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <label>عدد المحققين</label>
+                                <select id="setting-detectives">
+                                    <option value="0">0</option>
+                                    <option value="1" selected>1</option>
+                                    <option value="2">2</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="setting-item">
-                            <label>عدد المافيا</label>
-                            <select id="setting-mafia">
-                                <option value="0">تلقائي</option>
-                                <option value="1">1</option>
-                                <option value="2">2</option>
-                                <option value="3">3</option>
-                            </select>
+                        <div class="setting-toggle">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="setting-self-heal" checked>
+                                <span class="toggle-switch"></span>
+                                <span>الطبيب يمكنه حماية نفسه</span>
+                            </label>
                         </div>
-                        <div class="setting-item">
-                            <label>عدد الأطباء</label>
-                            <select id="setting-doctors">
-                                <option value="0">0</option>
-                                <option value="1" selected>1</option>
-                                <option value="2">2</option>
-                            </select>
-                        </div>
-                        <div class="setting-item">
-                            <label>عدد المحققين</label>
-                            <select id="setting-detectives">
-                                <option value="0">0</option>
-                                <option value="1" selected>1</option>
-                                <option value="2">2</option>
-                            </select>
+                        <div class="setting-toggle">
+                            <label class="toggle-label">
+                                <input type="checkbox" id="setting-public">
+                                <span class="toggle-switch"></span>
+                                <span>🌐 غرفة عامة (تظهر في قائمة الغرف)</span>
+                            </label>
                         </div>
                     </div>
-                    <div class="setting-toggle">
-                        <label class="toggle-label">
-                            <input type="checkbox" id="setting-self-heal" checked>
-                            <span class="toggle-switch"></span>
-                            <span>الطبيب يمكنه حماية نفسه</span>
-                        </label>
-                    </div>
-                    <div class="setting-toggle">
-                        <label class="toggle-label">
-                            <input type="checkbox" id="setting-public">
-                            <span class="toggle-switch"></span>
-                            <span>🌐 غرفة عامة (تظهر في قائمة الغرف)</span>
-                        </label>
+
+                    <div class="waiting-buttons">
+                        <button class="btn btn-primary btn-large hidden" id="start-game-btn">بدء اللعبة</button>
+                        <button class="btn btn-secondary" id="leave-room-btn">مغادرة الغرفة</button>
                     </div>
                 </div>
+            </section>
 
-                <div class="waiting-buttons">
-                    <button class="btn btn-primary btn-large hidden" id="start-game-btn">بدء اللعبة</button>
-                    <button class="btn btn-secondary" id="leave-room-btn">مغادرة الغرفة</button>
-                </div>
-            </div>
-        </section>
+            <!-- ==================== ROLE REVEAL SCREEN ==================== -->
+            <section id="role-screen" class="screen">
+                <div class="role-reveal-container">
+                    <h2>دورك السري</h2>
+                    <p class="role-instruction">اضغط على البطاقة لكشف دورك. احفظه جيداً!</p>
 
-        <!-- ==================== ROLE REVEAL SCREEN ==================== -->
-        <section id="role-screen" class="screen">
-            <div class="role-reveal-container">
-                <h2>دورك السري</h2>
-                <p class="role-instruction">اضغط على البطاقة لكشف دورك. احفظه جيداً!</p>
-
-                <div class="card-container">
-                    <div class="role-card" id="role-card">
-                        <div class="card-face card-front">
-                            <div class="card-pattern"></div>
-                            <span class="tap-hint">اضغط للكشف</span>
-                        </div>
-                        <div class="card-face card-back">
-                            <div class="role-icon" id="role-icon">🎭</div>
-                            <div class="role-name" id="role-name">الدور</div>
-                            <div class="role-description" id="role-description">الوصف</div>
+                    <div class="card-container">
+                        <div class="role-card" id="role-card">
+                            <div class="card-face card-front">
+                                <div class="card-pattern"></div>
+                                <span class="tap-hint">اضغط للكشف</span>
+                            </div>
+                            <div class="card-face card-back">
+                                <div class="role-icon" id="role-icon">🎭</div>
+                                <div class="role-name" id="role-name">الدور</div>
+                                <div class="role-description" id="role-description">الوصف</div>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                <div class="ready-section">
-                    <p class="ready-status" id="ready-status">في انتظار اللاعبين...</p>
-                    <button class="btn btn-primary" id="ready-btn" disabled>أنا جاهز</button>
-                </div>
-            </div>
-        </section>
-
-        <!-- Phase Transition Overlay -->
-        <div class="phase-transition hidden" id="phase-transition">
-            <div class="phase-transition-content">
-                <div class="phase-transition-icon" id="phase-transition-icon">🌙</div>
-                <div class="phase-transition-text" id="phase-transition-text">الليل يحل...</div>
-            </div>
-        </div>
-
-        <!-- ==================== GAME SCREEN (ROUND TABLE) ==================== -->
-        <section id="game-screen" class="screen">
-            <!-- Phase Indicator -->
-            <div class="phase-banner" id="phase-banner">
-                <span class="phase-icon">🌙</span>
-                <span class="phase-text">الليلة 1</span>
-            </div>
-
-            <!-- Round Table Container -->
-            <div class="table-arena">
-                <div class="round-table">
-                    <div class="table-center">
-                        <div class="table-texture"></div>
+                    <div class="ready-section">
+                        <p class="ready-status" id="ready-status">في انتظار اللاعبين...</p>
+                        <button class="btn btn-primary" id="ready-btn" disabled>أنا جاهز</button>
                     </div>
-                    <!-- Player seats will be dynamically added here -->
-                    <div class="seats-container" id="seats-container"></div>
+                </div>
+            </section>
+
+            <!-- Phase Transition Overlay -->
+            <div class="phase-transition hidden" id="phase-transition">
+                <div class="phase-transition-content">
+                    <div class="phase-transition-icon" id="phase-transition-icon">🌙</div>
+                    <div class="phase-transition-text" id="phase-transition-text">الليل يحل...</div>
                 </div>
             </div>
 
-            <!-- Action Panel (alive players) -->
-            <div class="action-panel" id="action-panel">
-                <div class="action-title" id="action-title">اختر لاعباً</div>
-                <div class="action-hint" id="action-hint">اضغط على لاعب حول الطاولة لتنفيذ إجراءك
+            <!-- ==================== GAME SCREEN (ROUND TABLE) ==================== -->
+            <section id="game-screen" class="screen">
+                <!-- Phase Indicator -->
+                <div class="phase-banner" id="phase-banner">
+                    <span class="phase-icon">🌙</span>
+                    <span class="phase-text">الليلة 1</span>
                 </div>
-                <button class="btn btn-secondary" id="skip-action-btn" style="display: none;">تخطي التصويت</button>
-            </div>
 
-            <!-- Spectator Banner (dead players) -->
-            <div class="spectator-banner hidden" id="spectator-banner">
-                <span class="spectator-icon">👻</span>
-                <span class="spectator-text">أنت متوفى — تشاهد اللعبة كمراقب</span>
-            </div>
-
-            <!-- Event Log Panel -->
-            <div class="event-log-toggle" id="event-log-toggle">📜 سجل الأحداث</div>
-            <div class="event-log hidden" id="event-log">
-                <div class="event-log-header">
-                    <h3>📜 سجل الأحداث</h3>
-                    <button class="btn btn-small" id="close-event-log">✕</button>
-                </div>
-                <div class="event-log-content" id="event-log-content"></div>
-            </div>
-
-            <!-- Night Result Modal -->
-            <div class="modal hidden" id="night-modal">
-                <div class="modal-content">
-                    <h2 id="night-result-title">طلوع الفجر</h2>
-                    <p id="night-result-text"></p>
-                    <div class="round-summary" id="night-round-summary"></div>
-                    <button class="btn btn-primary" id="night-continue-btn">متابعة</button>
-                </div>
-            </div>
-
-            <!-- Detective Investigation Card Modal -->
-            <div class="modal hidden" id="detective-modal">
-                <div class="modal-content detective-result-card">
-                    <h2>🔍 نتيجة التحقيق</h2>
-                    <div class="investigation-card" id="investigation-card">
-                        <div class="investigation-target" id="investigation-target">اسم اللاعب</div>
-                        <div class="investigation-result" id="investigation-result">
-                            <span class="result-icon">👤</span>
-                            <span class="result-text">بريء</span>
+                <!-- Round Table Container -->
+                <div class="table-arena">
+                    <div class="round-table">
+                        <div class="table-center">
+                            <div class="table-texture"></div>
                         </div>
+                        <!-- Player seats will be dynamically added here -->
+                        <div class="seats-container" id="seats-container"></div>
                     </div>
-                    <button class="btn btn-primary" id="detective-continue-btn">فهمت</button>
-                </div>
-            </div>
-
-            <!-- Vote Result Modal -->
-            <div class="modal hidden" id="vote-modal">
-                <div class="modal-content">
-                    <h2 id="vote-result-title">قرار المدينة</h2>
-                    <p id="vote-result-text"></p>
-                    <div class="vote-breakdown" id="vote-breakdown"></div>
-                    <div class="round-summary" id="vote-round-summary"></div>
-                    <button class="btn btn-primary" id="vote-continue-btn">متابعة</button>
-                </div>
-            </div>
-        </section>
-
-        <!-- ==================== GAME OVER SCREEN ==================== -->
-        <section id="gameover-screen" class="screen">
-            <div class="gameover-container">
-                <div class="winner-banner" id="winner-banner">
-                    <span class="winner-icon">🏆</span>
-                    <h1 id="winner-text">النصر!</h1>
-                </div>
-                <p class="winner-message" id="winner-message">انتهت اللعبة</p>
-
-                <div class="final-roles">
-                    <h3>جميع اللاعبين</h3>
-                    <ul class="final-player-list" id="final-player-list"></ul>
                 </div>
 
-                <div class="gameover-buttons">
-                    <button class="btn btn-primary btn-large hidden" id="play-again-btn">اللعب مجدداً</button>
-                    <button class="btn btn-secondary btn-large" id="leave-game-btn">مغادرة الغرفة</button>
+                <!-- Action Panel (alive players) -->
+                <div class="action-panel" id="action-panel">
+                    <div class="action-title" id="action-title">اختر لاعباً</div>
+                    <div class="action-hint" id="action-hint">اضغط على لاعب حول الطاولة لتنفيذ إجراءك
+                    </div>
+                    <button class="btn btn-secondary" id="skip-action-btn" style="display: none;">تخطي
+                        التصويت</button>
                 </div>
-            </div>
-        </section>
+
+                <!-- Spectator Banner (dead players) -->
+                <div class="spectator-banner hidden" id="spectator-banner">
+                    <span class="spectator-icon">👻</span>
+                    <span class="spectator-text">أنت متوفى — تشاهد اللعبة كمراقب</span>
+                </div>
+
+                <!-- Event Log Panel -->
+                <div class="event-log-toggle" id="event-log-toggle">📜 سجل الأحداث</div>
+                <div class="event-log hidden" id="event-log">
+                    <div class="event-log-header">
+                        <h3>📜 سجل الأحداث</h3>
+                        <button class="btn btn-small" id="close-event-log">✕</button>
+                    </div>
+                    <div class="event-log-content" id="event-log-content"></div>
+                </div>
+
+                <!-- Night Result Modal -->
+                <div class="modal hidden" id="night-modal">
+                    <div class="modal-content">
+                        <h2 id="night-result-title">طلوع الفجر</h2>
+                        <p id="night-result-text"></p>
+                        <div class="round-summary" id="night-round-summary"></div>
+                        <button class="btn btn-primary" id="night-continue-btn">متابعة</button>
+                    </div>
+                </div>
+
+                <!-- Detective Investigation Card Modal -->
+                <div class="modal hidden" id="detective-modal">
+                    <div class="modal-content detective-result-card">
+                        <h2>🔍 نتيجة التحقيق</h2>
+                        <div class="investigation-card" id="investigation-card">
+                            <div class="investigation-target" id="investigation-target">اسم اللاعب</div>
+                            <div class="investigation-result" id="investigation-result">
+                                <span class="result-icon">👤</span>
+                                <span class="result-text">بريء</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-primary" id="detective-continue-btn">فهمت</button>
+                    </div>
+                </div>
+
+                <!-- Vote Result Modal -->
+                <div class="modal hidden" id="vote-modal">
+                    <div class="modal-content">
+                        <h2 id="vote-result-title">قرار المدينة</h2>
+                        <p id="vote-result-text"></p>
+                        <div class="vote-breakdown" id="vote-breakdown"></div>
+                        <div class="round-summary" id="vote-round-summary"></div>
+                        <button class="btn btn-primary" id="vote-continue-btn">متابعة</button>
+                    </div>
+                </div>
+
+                <!-- Profile Modal -->
+                <div class="modal hidden" id="profile-modal">
+                    <div class="modal-content profile-card">
+                        <div class="profile-header">
+                            <div class="profile-avatar">👤</div>
+                            <h2 id="profile-username">User</h2>
+                            <span class="level-badge" id="profile-level">Lv 1</span>
+                        </div>
+
+                        <div class="xp-section">
+                            <div class="xp-header">
+                                <span>الخبرة (XP)</span>
+                                <span id="xp-text">0 / 0</span>
+                            </div>
+                            <div class="xp-bar-container">
+                                <div class="xp-bar-fill" id="xp-bar-fill" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div class="profile-stats-grid">
+                            <div class="stat-item">
+                                <span class="stat-value" id="stats-games">0</span>
+                                <span class="stat-label">المباريات</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="stats-wins">0</span>
+                                <span class="stat-label">الفوز</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-value" id="stats-ratio">0%</span>
+                                <span class="stat-label">النسبة</span>
+                            </div>
+                        </div>
+
+                        <button class="btn btn-secondary w-full" id="close-profile-btn">إغلاق</button>
+                        <button class="btn btn-small w-full mt-2" id="logout-btn">تسجيل الخروج</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ==================== GAME OVER SCREEN ==================== -->
+            <section id="gameover-screen" class="screen">
+                <div class="gameover-container">
+                    <div class="winner-banner" id="winner-banner">
+                        <span class="winner-icon">🏆</span>
+                        <h1 id="winner-text">النصر!</h1>
+                    </div>
+                    <p class="winner-message" id="winner-message">انتهت اللعبة</p>
+
+                    <div class="final-roles">
+                        <h3>جميع اللاعبين</h3>
+                        <ul class="final-player-list" id="final-player-list"></ul>
+                    </div>
+
+                    <div class="gameover-buttons">
+                        <button class="btn btn-primary btn-large hidden" id="play-again-btn">اللعب مجدداً</button>
+                        <button class="btn btn-secondary btn-large" id="leave-game-btn">مغادرة الغرفة</button>
+                    </div>
+                </div>
+            </section>
+        </main>
     </div>
-
     <script src="/socket.io/socket.io.js"></script>
     <script src="app.js"></script>
 </body>

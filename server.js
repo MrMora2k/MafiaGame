@@ -2,13 +2,80 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
+const jwt = require('jsonwebtoken');
+const DB = require('./database');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
+const SECRET_KEY = 'mafia_ultra_secret_key_2026'; // In production, move to env
+
+app.use(express.json());
 // Serve static files
 app.use(express.static(path.join(__dirname, 'public')));
+
+// Authentication API
+app.post('/api/register', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        console.log(`[AUTH] Registering user: ${username}`);
+        const userId = await DB.register(username, password);
+        const token = jwt.sign({ userId, username }, SECRET_KEY, { expiresIn: '7d' });
+        console.log(`[AUTH] Registration success: ${username} (ID: ${userId})`);
+        res.json({ success: true, token, user: { id: userId, username } });
+    } catch (err) {
+        console.error(`[AUTH] Registration failed for ${req.body.username}:`, err);
+        res.status(400).json({ success: false, error: 'Registration failed or user exists' });
+    }
+});
+
+app.post('/api/login', async (req, res) => {
+    try {
+        const { username, password } = req.body;
+        console.log(`[AUTH] Login attempt: ${username}`);
+        const user = await DB.login(username, password);
+        const token = jwt.sign({ userId: user.id, username: user.username }, SECRET_KEY, { expiresIn: '7d' });
+        console.log(`[AUTH] Login success: ${username}`);
+        res.json({ success: true, token, user: { id: user.id, username: user.username } });
+    } catch (err) {
+        console.error(`[AUTH] Login failed for ${req.body.username}:`, err.message);
+        res.status(401).json({ success: false, error: err.message });
+    }
+});
+
+app.get('/api/me', async (req, res) => {
+    try {
+        const token = req.headers.authorization?.split(' ')[1];
+        if (!token) throw new Error('No token');
+        const decoded = jwt.verify(token, SECRET_KEY);
+        const stats = await DB.getStats(decoded.userId);
+        if (!stats) {
+            console.warn(`[AUTH] Stats not found for user ID: ${decoded.userId}`);
+            return res.status(404).json({ success: false, error: 'User stats not found' });
+        }
+        res.json({ success: true, user: stats });
+    } catch (err) {
+        console.error(`[AUTH] Auth check failed:`, err.message);
+        res.status(401).json({ success: false });
+    }
+});
+
+// Socket Auth Middleware
+io.use((socket, next) => {
+    const token = socket.handshake.auth.token;
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, SECRET_KEY);
+            socket.userId = decoded.userId;
+            socket.username = decoded.username;
+            return next();
+        } catch (err) {
+            // Expired or invalid token
+        }
+    }
+    next();
+});
 
 // API to get public rooms
 app.get('/api/rooms', (req, res) => {
@@ -119,11 +186,19 @@ function checkWinCondition(room) {
     const aliveTown = alivePlayers.filter(p => p.role !== ROLES.MAFIA);
 
     if (aliveMafia.length === 0) {
-        return { winner: 'town', message: 'The Town wins! All Mafia have been eliminated.' };
+        return {
+            winner: 'town',
+            message: 'المدينة تفوز! تم القضاء على جميع أفراد المافيا.',
+            winningRole: 'town'
+        };
     }
 
     if (aliveMafia.length >= aliveTown.length) {
-        return { winner: 'mafia', message: 'The Mafia wins! They have taken over the town.' };
+        return {
+            winner: 'mafia',
+            message: 'المافيا تفوز! لقد سيطروا على المدينة.',
+            winningRole: 'mafia'
+        };
     }
 
     return null;
@@ -672,11 +747,10 @@ function resolveNight(room) {
     // Check win condition
     const winResult = checkWinCondition(room);
     if (winResult) {
-        endGame(room, winResult);
-        return;
+        resolveGameOver(room, winResult);
+    } else {
+        startDayPhase(room);
     }
-
-    startDayPhase(room);
 }
 
 // Start day phase
@@ -740,20 +814,43 @@ function resolveDayVoting(room) {
         dayNumber: room.dayNumber
     });
 
+    // Check win condition after vote
     const winResult = checkWinCondition(room);
     if (winResult) {
-        endGame(room, winResult);
-        return;
+        resolveGameOver(room, winResult);
+    } else {
+        setTimeout(() => {
+            startNightPhase(room);
+        }, 3000);
     }
-
-    setTimeout(() => {
-        startNightPhase(room);
-    }, 3000);
 }
 
-// End game
-function endGame(room, result) {
-    room.phase = PHASES.GAME_OVER;
+// Resolve game over and award XP
+async function resolveGameOver(room, result) {
+    room.phase = PHASES.GAMEOVER;
+    room.currentTurnPlayerId = null;
+
+    // Award XP and update stats for each player
+    const updates = room.players.map(async (player) => {
+        // Find if they are logged in via socket.userId
+        const socket = Array.from(io.sockets.sockets.values()).find(s => s.id === player.id);
+        const userId = socket ? socket.userId : null;
+
+        if (!userId) return;
+
+        const isWinner = (result.winningRole === 'mafia' && player.role === ROLES.MAFIA) ||
+            (result.winningRole === 'town' && player.role !== ROLES.MAFIA);
+
+        const xpEarned = isWinner ? 50 : 10;
+
+        try {
+            await DB.updateGameStats(userId, xpEarned, isWinner);
+        } catch (err) {
+            console.error(`Failed to update stats for user ${userId}:`, err);
+        }
+    });
+
+    await Promise.all(updates);
 
     io.to(room.code).emit('game:over', {
         winner: result.winner,
@@ -765,6 +862,8 @@ function endGame(room, result) {
             alive: p.alive
         }))
     });
+
+    console.log(`Game Over in room ${room.code}. Winner: ${result.winner}`);
 }
 
 // Start server

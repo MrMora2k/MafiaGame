@@ -1,4 +1,5 @@
-// ==================== SERVICE WORKER REGISTRATION ====================
+// ==================== SERVICE WORKER (TEMPORARILY DISABLED) ====================
+/*
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('/sw.js')
@@ -6,22 +7,27 @@ if ('serviceWorker' in navigator) {
             .catch(err => console.log('❌ Service Worker registration failed:', err));
     });
 }
+*/
+console.log('--- Mafia App Script Execution Started ---');
 
 // ==================== SOCKET & STATE ====================
-const socket = io();
+let socket;
 
 const state = {
     roomCode: null,
     playerId: null,
-    playerName: null,
-    players: [],
+    username: null,
     role: null,
-    phase: null,
-    isHost: false,
-    selectedTarget: null,
-    hasActed: false,
+    phase: 'lobby',
+    players: [],
     dayNumber: 0,
-    settings: {}
+    hasActed: false,
+    selectedTarget: null,
+    settings: {},
+    token: localStorage.getItem('mafia_token') || null,
+    user: null,
+    authMode: 'login', // 'login' or 'register'
+    isCheckingAuth: false // Guard for redundant calls
 };
 
 const ROLE_INFO = {
@@ -41,15 +47,14 @@ function loadPlayerName() {
 }
 
 // ==================== DOM ELEMENTS ====================
-const screens = {
-    lobby: document.getElementById('lobby-screen'),
-    waiting: document.getElementById('waiting-screen'),
-    role: document.getElementById('role-screen'),
-    game: document.getElementById('game-screen'),
-    gameover: document.getElementById('gameover-screen')
-};
-
 const elements = {
+    // Screens
+    authScreen: document.getElementById('auth-screen'),
+    lobbyScreen: document.getElementById('lobby-screen'),
+    waitingScreen: document.getElementById('waiting-screen'),
+    roleScreen: document.getElementById('role-screen'),
+    gameScreen: document.getElementById('game-screen'),
+    gameoverScreen: document.getElementById('gameover-screen'),
     createName: document.getElementById('create-name'),
     joinName: document.getElementById('join-name'),
     roomCodeInput: document.getElementById('room-code'),
@@ -113,19 +118,264 @@ const elements = {
     eventLogContent: document.getElementById('event-log-content'),
     closeEventLog: document.getElementById('close-event-log'),
     nightRoundSummary: document.getElementById('night-round-summary'),
-    voteRoundSummary: document.getElementById('vote-round-summary')
+    voteRoundSummary: document.getElementById('vote-round-summary'),
+
+    // Auth & Profile
+    authForm: document.getElementById('auth-form'),
+    authUsername: document.getElementById('auth-username'),
+    authPassword: document.getElementById('auth-password'),
+    authSubmitBtn: document.getElementById('auth-submit-btn'),
+    authError: document.getElementById('auth-error'),
+    tabLogin: document.getElementById('tab-login'),
+    tabRegister: document.getElementById('tab-register'),
+    profileBtn: document.getElementById('profile-btn'),
+    headerUsername: document.getElementById('header-username'),
+    profileModal: document.getElementById('profile-modal'),
+    profileUsername: document.getElementById('profile-username'),
+    profileLevel: document.getElementById('profile-level'),
+    xpText: document.getElementById('xp-text'),
+    xpBarFill: document.getElementById('xp-bar-fill'),
+    statsGames: document.getElementById('stats-games'),
+    statsWins: document.getElementById('stats-wins'),
+    statsRatio: document.getElementById('stats-ratio'),
+    closeProfileBtn: document.getElementById('close-profile-btn'),
+    logoutBtn: document.getElementById('logout-btn'),
+    headerLogoutBtn: document.getElementById('header-logout-btn')
 };
 
 // ==================== INITIALIZE ====================
 function init() {
-    const savedName = loadPlayerName();
-    if (savedName) {
-        elements.createName.value = savedName;
-        elements.joinName.value = savedName;
-        elements.browseName.value = savedName;
+    if (state.token) {
+        checkAuth('init');
+    } else {
+        showScreen('auth');
     }
 }
-init();
+
+
+// ==================== ERROR HANDLING & UTILS ====================
+window.onerror = function (msg, url, lineNo, columnNo, error) {
+    const string = msg.toLowerCase();
+    const substring = "script error";
+    if (string.indexOf(substring) > -1) {
+        alert('Script Error: See Console for details');
+    } else {
+        const message = [
+            'Message: ' + msg,
+            'URL: ' + url,
+            'Line: ' + lineNo,
+            'Column: ' + columnNo,
+            'Error object: ' + JSON.stringify(error)
+        ].join(' - ');
+
+        console.error(message);
+    }
+    return false;
+    return false;
+};
+
+// Helper to safely add events
+function safeAddEvent(element, event, callback) {
+    if (element) {
+        element.addEventListener(event, callback);
+    } else {
+        // Optional: console.warn(`[INIT] Could not add ${event} listener: Element not found.`);
+    }
+}
+
+
+// ==================== AUTH LOGIC ====================
+function setupAuthListeners() {
+    console.log('[INIT] Setting up Auth Listeners...');
+
+    // Tab Switching
+    if (elements.tabLogin && elements.tabRegister) {
+        elements.tabLogin.addEventListener('click', () => switchAuthMode('login'));
+        elements.tabRegister.addEventListener('click', () => switchAuthMode('register'));
+    }
+
+    // Form Submission
+    if (elements.authForm) {
+        elements.authForm.addEventListener('submit', handleAuthSubmit);
+    }
+}
+
+function switchAuthMode(mode) {
+    state.authMode = mode;
+    console.log(`[AUTH] Switched to ${mode} mode`);
+
+    // Update Tabs
+    elements.tabLogin.classList.toggle('active', mode === 'login');
+    elements.tabRegister.classList.toggle('active', mode === 'register');
+
+    // Update Button Text
+    elements.authSubmitBtn.textContent = mode === 'login' ? 'دخول' : 'تسجيل جديد';
+
+    // Clear Errors
+    elements.authError.classList.add('hidden');
+}
+
+async function handleAuthSubmit(e) {
+    e.preventDefault();
+    console.log('[AUTH] Form Submitted');
+
+    const username = elements.authUsername.value.trim();
+    const password = elements.authPassword.value.trim();
+
+    if (!username || !password) {
+        showAuthError('الرجاء إدخال اسم المستخدم وكلمة المرور');
+        return;
+    }
+
+    setAuthLoading(true);
+
+    try {
+        const endpoint = state.authMode === 'login' ? '/api/login' : '/api/register';
+        console.log(`[AUTH] Sending request to ${endpoint}...`);
+
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+
+        const data = await res.json();
+
+        if (data.success) {
+            console.log('[AUTH] Success!');
+            state.token = data.token;
+            localStorage.setItem('mafia_token', data.token);
+            checkAuth('login-success');
+        } else {
+            showAuthError(data.error || 'فشلت العملية');
+        }
+    } catch (err) {
+        console.error('[AUTH] Request Failed:', err);
+        showAuthError('تعذر الاتصال بالخادم. تأكد من تشغيله.');
+    } finally {
+        setAuthLoading(false);
+    }
+}
+
+function showAuthError(msg) {
+    elements.authError.textContent = msg;
+    elements.authError.classList.remove('hidden');
+}
+
+function setAuthLoading(isLoading) {
+    elements.authSubmitBtn.disabled = isLoading;
+    elements.authSubmitBtn.textContent = isLoading ? 'جاري التحميل...' : (state.authMode === 'login' ? 'دخول' : 'تسجيل جديد');
+}
+
+async function checkAuth(source = 'unknown') {
+    if (state.isCheckingAuth) {
+        console.warn(`[AUTH] checkAuth ignored (already in progress). Source: ${source}`);
+        return;
+    }
+
+    try {
+        state.isCheckingAuth = true;
+        console.log(`[AUTH] Checking authentication... Source: ${source}`);
+
+        if (!state.token) {
+            console.warn('[AUTH] No token found, skipping checkAuth');
+            showScreen('auth');
+            state.isCheckingAuth = false;
+            return;
+        }
+
+        const res = await fetch('/api/me', {
+            headers: { 'Authorization': `Bearer ${state.token}` }
+        });
+
+        if (!res.ok) throw new Error(`API Error: ${res.status}`);
+
+        const data = await res.json();
+
+        if (data.success && data.user) {
+            console.log('[AUTH] Auth success:', data.user.username);
+            state.user = data.user;
+            state.username = data.user.username;
+            state.playerId = data.user.id || data.user.user_id;
+            updateProfileUI();
+            showScreen('lobby');
+            connectSocket();
+        } else {
+            console.warn('[AUTH] Auth failed or user data missing:', data);
+            logout();
+        }
+    } catch (err) {
+        console.error('[AUTH] Auth check crashed:', err);
+        logout();
+    } finally {
+        state.isCheckingAuth = false;
+    }
+}
+
+function connectSocket() {
+    socket = io({
+        auth: { token: state.token }
+    });
+    setupSocketEvents();
+}
+
+function updateProfileUI() {
+    if (!state.user) return;
+
+    elements.headerUsername.textContent = state.username;
+    elements.profileUsername.textContent = state.username;
+
+    const level = state.user.level || 1;
+    elements.profileLevel.textContent = `Lv ${level}`;
+
+    const xp = state.user.total_xp || 0;
+    const currentLevelXP = Math.pow((level - 1), 2) * 100;
+    const nextLevelXP = Math.pow(level, 2) * 100;
+
+    // Total XP formula for progress bar
+    const progress = nextLevelXP > currentLevelXP
+        ? ((xp - currentLevelXP) / (nextLevelXP - currentLevelXP)) * 100
+        : 100;
+
+    elements.xpText.textContent = `${xp} / ${nextLevelXP} XP`;
+    elements.xpBarFill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+
+    elements.statsGames.textContent = state.user.games_played || 0;
+    elements.statsWins.textContent = state.user.wins || 0;
+    const ratio = state.user.games_played > 0 ? Math.round((state.user.wins / state.user.games_played) * 100) : 0;
+    elements.statsRatio.textContent = `${ratio}%`;
+}
+
+function logout() {
+    localStorage.removeItem('mafia_token');
+    state.token = null;
+    state.user = null;
+    if (socket) socket.disconnect();
+    showScreen('auth');
+}
+
+// ==================== INITIALIZE ====================
+function init() {
+    console.log('[INIT] App Initializing...');
+    setupAuthListeners();
+
+    if (state.token) {
+        checkAuth('init');
+    } else {
+        showScreen('auth');
+    }
+}
+
+safeAddEvent(elements.profileBtn, 'click', () => {
+    if (elements.profileModal) elements.profileModal.classList.remove('hidden');
+});
+
+safeAddEvent(elements.closeProfileBtn, 'click', () => {
+    if (elements.profileModal) elements.profileModal.classList.add('hidden');
+});
+
+safeAddEvent(elements.logoutBtn, 'click', logout);
+safeAddEvent(elements.headerLogoutBtn, 'click', logout);
 
 // ==================== EVENT LOG ====================
 const eventHistory = [];
@@ -138,16 +388,16 @@ function addEvent(type, text, dayNumber) {
         <div class="event-entry-header">الجولة ${dayNumber} — ${type === 'night' ? '🌙 ليل' : type === 'day' ? '☀️ نهار' : type === 'death' ? '💀 وفاة' : '✅ نجاة'}</div>
         <div class="event-entry-text">${text}</div>
     `;
-    elements.eventLogContent.prepend(entry);
+    if (elements.eventLogContent) elements.eventLogContent.prepend(entry);
 }
 
 // Event log toggle
-elements.eventLogToggle.addEventListener('click', () => {
-    elements.eventLog.classList.toggle('hidden');
+safeAddEvent(elements.eventLogToggle, 'click', () => {
+    if (elements.eventLog) elements.eventLog.classList.toggle('hidden');
 });
 
-elements.closeEventLog.addEventListener('click', () => {
-    elements.eventLog.classList.add('hidden');
+safeAddEvent(elements.closeEventLog, 'click', () => {
+    if (elements.eventLog) elements.eventLog.classList.add('hidden');
 });
 
 // ==================== PHASE TRANSITION ====================
@@ -198,8 +448,33 @@ function updateSpectatorUI() {
 
 // ==================== SCREEN NAVIGATION ====================
 function showScreen(screenName) {
-    Object.values(screens).forEach(s => s.classList.remove('active'));
-    screens[screenName].classList.add('active');
+    console.log(`[NAV] Navigating to: ${screenName}`);
+    const screenMap = {
+        auth: elements.authScreen,
+        lobby: elements.lobbyScreen,
+        waiting: elements.waitingScreen,
+        role: elements.roleScreen,
+        game: elements.gameScreen,
+        gameOver: elements.gameoverScreen
+    };
+
+    // Deactivate all screens
+    Object.entries(screenMap).forEach(([name, element]) => {
+        if (element) {
+            element.classList.remove('active');
+        } else {
+            console.error(`[NAV] Element for screen '${name}' is missing!`);
+        }
+    });
+
+    // Activate target screen
+    const target = screenMap[screenName];
+    if (target) {
+        target.classList.add('active');
+        console.log(`[NAV] Switched to: ${screenName}`);
+    } else {
+        console.error(`[NAV] Screen not found in map: ${screenName}`);
+    }
 }
 
 function showError(message) {
@@ -207,6 +482,260 @@ function showError(message) {
     elements.lobbyError.classList.remove('hidden');
     setTimeout(() => elements.lobbyError.classList.add('hidden'), 4000);
 }
+
+// ==================== SOCKET EVENTS SETUP ====================
+function setupSocketEvents() {
+    socket.on('connect', () => {
+        console.log('Connected to server');
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Disconnected from server');
+    });
+
+    socket.on('error', (message) => showError(message));
+
+    // ==================== SOCKET EVENTS - LOBBY ====================
+    socket.on('room:created', ({ roomCode, players, settings }) => {
+        state.roomCode = roomCode;
+        state.isHost = true;
+        state.playerId = socket.id;
+        state.players = players;
+        elements.displayRoomCode.textContent = roomCode;
+        elements.startGameBtn.classList.remove('hidden');
+        elements.settingsPanel.classList.remove('hidden');
+        applySettings(settings);
+        updatePlayerList(players);
+        showScreen('waiting');
+    });
+
+    socket.on('room:joined', ({ roomCode, players, settings }) => {
+        state.roomCode = roomCode;
+        state.playerId = socket.id;
+        state.players = players;
+        elements.displayRoomCode.textContent = roomCode;
+        applySettings(settings);
+        updatePlayerList(players);
+        showScreen('waiting');
+    });
+
+    socket.on('room:error', (message) => {
+        showError(message);
+    });
+
+    socket.on('room:left', () => {
+        state.roomCode = null;
+        state.isHost = false;
+        state.players = [];
+        document.body.classList.remove('theme-day'); // Reset to night theme
+        showScreen('lobby');
+    });
+
+    socket.on('player:list', (players) => {
+        state.players = players;
+        updatePlayerList(players);
+    });
+
+    socket.on('host:assigned', () => {
+        state.isHost = true;
+        elements.startGameBtn.classList.remove('hidden');
+        elements.settingsPanel.classList.remove('hidden');
+    });
+
+    socket.on('settings:updated', (settings) => {
+        applySettings(settings);
+    });
+
+    // ==================== SOCKET EVENTS - ROLE REVEAL ====================
+    socket.on('role:assigned', ({ role, teammates }) => {
+        state.role = role;
+        state.teammates = teammates || [];
+        const info = ROLE_INFO[role];
+        elements.roleIcon.innerHTML = `<img src="${info.image}" alt="${info.name}" style="width: 80px; height: 80px; object-fit: contain;">`;
+        elements.roleName.textContent = info.name;
+
+        // If mafia with teammates, show them in description
+        if (role === 'mafia' && teammates && teammates.length > 0) {
+            const teammateNames = teammates.map(t => `${t.name} (#${t.playerNumber})`).join('، ');
+            elements.roleDescription.innerHTML = `${info.description}<br><br><strong>🔪 زملاؤك المافيا:</strong> ${teammateNames}`;
+        } else {
+            elements.roleDescription.textContent = info.description;
+        }
+
+        document.querySelector('.card-back').className = `card-face card-back role-${role}`;
+        elements.roleCard.classList.remove('flipped');
+        elements.readyBtn.disabled = true;
+        elements.readyBtn.textContent = "أنا جاهز";
+    });
+
+    socket.on('game:started', ({ players }) => {
+        state.players = players;
+        state.phase = 'roleReveal';
+        showScreen('role');
+    });
+
+    socket.on('game:reset', ({ players, settings }) => {
+        state.players = players;
+        state.phase = 'lobby';
+        state.role = null;
+        document.body.classList.remove('theme-day'); // Reset to night theme
+        applySettings(settings);
+        updatePlayerList(players);
+        showScreen('waiting');
+    });
+
+    socket.on('player:readyUpdate', ({ readyCount, totalCount }) => {
+        elements.readyStatus.textContent = `${readyCount}/${totalCount} لاعب جاهز`;
+    });
+
+    // ==================== SOCKET EVENTS - NIGHT PHASE ====================
+    socket.on('phase:night', ({ dayNumber, players, settings, currentTurn }) => {
+        state.players = players;
+        state.phase = 'night';
+        state.dayNumber = dayNumber;
+        state.hasActed = false;
+        state.selectedTarget = null;
+        state.currentTurn = currentTurn;
+        if (settings) state.settings = settings;
+
+        showPhaseTransition('night', dayNumber, () => {
+            document.body.classList.remove('theme-day');
+            elements.phaseBanner.innerHTML = `<span class="phase-icon">🌙</span><span class="phase-text">الليلة ${dayNumber}</span>`;
+            if (state.currentTurn) {
+                elements.phaseBanner.innerHTML += ` <span class="turn-indicator">| دور: ${state.currentTurn.name}</span>`;
+            }
+
+            updateActionPanel();
+            updateSpectatorUI();
+            renderSeats();
+            showScreen('game');
+        });
+    });
+
+    socket.on('turn:change', ({ playerId, playerNumber, name }) => {
+        state.currentTurn = playerId ? { playerId, playerNumber, name } : null;
+        state.hasActed = false; // Reset action state for new turn
+
+        // Update banner
+        const turnSpan = elements.phaseBanner.querySelector('.turn-indicator');
+        if (playerId && name) {
+            if (turnSpan) {
+                turnSpan.textContent = `| دور: ${name}`;
+            } else {
+                elements.phaseBanner.innerHTML += ` <span class="turn-indicator">| دور: ${name}</span>`;
+            }
+        } else if (turnSpan) {
+            turnSpan.remove(); // Remove indicator if turn is null
+        }
+
+        updateActionPanel();
+        renderSeats();
+    });
+
+    socket.on('night:actionConfirmed', () => {
+        // Action confirmed by server
+    });
+
+    socket.on('detective:result', ({ targetName, isMafia }) => {
+        elements.investigationTarget.textContent = targetName;
+
+        const resultDiv = elements.investigationResult;
+        resultDiv.className = `investigation-result ${isMafia ? 'mafia' : 'innocent'}`;
+        resultDiv.innerHTML = isMafia
+            ? '<span class="result-icon">🔪</span><span class="result-text">مافيا!</span>'
+            : '<span class="result-icon">👤</span><span class="result-text">بريء</span>';
+
+        elements.detectiveModal.classList.remove('hidden');
+    });
+
+    socket.on('night:result', ({ killed, saved, roleStats, dayNumber }) => {
+        if (killed) {
+            elements.nightResultTitle.textContent = 'مأساة عند الفجر';
+            elements.nightResultText.textContent = `${killed.name} وُجد ميتاً هذا الصباح. المافيا ضربت.`;
+            addEvent('death', `💀 ${killed.name} قُتل على يد المافيا`, dayNumber);
+        } else if (saved) {
+            elements.nightResultTitle.textContent = 'معجزة!';
+            elements.nightResultText.textContent = 'الطبيب أنقذ شخصاً من هجوم المافيا الليلة الماضية!';
+            addEvent('safe', '💉 الطبيب أنقذ أحد اللاعبين من الموت', dayNumber);
+        } else {
+            elements.nightResultTitle.textContent = 'ليلة هادئة';
+            elements.nightResultText.textContent = 'استيقظت المدينة لتجد الجميع بخير.';
+            addEvent('night', '🌙 ليلة هادئة — لم يُقتل أحد', dayNumber);
+        }
+
+        if (roleStats) {
+            renderRoundSummary(elements.nightRoundSummary, roleStats);
+        }
+
+        elements.nightModal.classList.remove('hidden');
+    });
+
+    // ==================== SOCKET EVENTS - DAY PHASE ====================
+    socket.on('phase:day', ({ dayNumber, players, currentTurn }) => {
+        state.players = players;
+        state.phase = 'day';
+        state.dayNumber = dayNumber;
+        state.hasActed = false;
+        state.selectedTarget = null;
+        state.currentTurn = currentTurn;
+
+        showPhaseTransition('day', dayNumber, () => {
+            document.body.classList.add('theme-day');
+            elements.phaseBanner.innerHTML = `<span class="phase-icon">☀️</span><span class="phase-text">اليوم ${dayNumber}</span>`;
+            if (state.currentTurn && state.currentTurn.name) {
+                elements.phaseBanner.innerHTML += ` <span class="turn-indicator">| دور: ${state.currentTurn.name}</span>`;
+            }
+
+            updateActionPanel();
+            updateSpectatorUI();
+            renderSeats();
+        });
+    });
+
+    socket.on('vote:update', ({ voteCount, requiredVotes }) => {
+        // Secret voting: only show progress, not who voted for whom
+        elements.actionHint.textContent = `${voteCount}/${requiredVotes} صوتوا`;
+    });
+
+    socket.on('vote:result', ({ eliminated, roleStats, dayNumber }) => {
+        // No vote breakdown - results are secret
+        elements.voteBreakdown.innerHTML = '';
+
+        if (eliminated) {
+            elements.voteResultTitle.textContent = '⚖️ قرار المدينة';
+            elements.voteResultText.textContent = `تم إخراج ${eliminated.name} من اللعبة.`;
+            addEvent('day', `⚖️ ${eliminated.name} أُخرج بالتصويت`, dayNumber);
+        } else {
+            elements.voteResultTitle.textContent = 'لم يتم الاتفاق';
+            elements.voteResultText.textContent = 'لم يتمكن اللاعبون من الاتفاق على قرار موحد. لم يتم إخراج أحد.';
+            addEvent('day', '🤷 لم يتفق اللاعبون — لم يُخرج أحد', dayNumber);
+        }
+        if (roleStats) renderRoundSummary(elements.voteRoundSummary, roleStats);
+        elements.voteModal.classList.remove('hidden');
+    });
+
+    // ==================== SOCKET EVENTS - GAME OVER ====================
+    socket.on('game:over', ({ winner, message, players }) => {
+        state.phase = 'gameover';
+        document.body.classList.remove('theme-day');
+        elements.winnerBanner.className = `winner-banner ${winner}`;
+        elements.winnerText.textContent = winner === 'mafia' ? 'المافيا تفوز!' : 'المدينة تفوز!';
+        elements.winnerMessage.textContent = message;
+        if (state.isHost) {
+            elements.playAgainBtn.classList.remove('hidden');
+        } else {
+            elements.playAgainBtn.classList.add('hidden');
+        }
+        elements.finalPlayerList.innerHTML = players.map(p => `
+            <li class="${p.alive ? '' : 'dead'}">
+                <span class="final-player-name">${p.alive ? '' : '💀'} ${p.name} ${p.id === state.playerId ? '(أنت)' : ''}</span>
+                <span class="final-player-role ${p.role}">${ROLE_INFO[p.role].name}</span>
+            </li>
+        `).join('');
+        showScreen('gameover');
+    });
+}
+
 
 // ==================== LOBBY SETUP ====================
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -258,31 +787,19 @@ async function fetchPublicRooms() {
 }
 
 function joinPublicRoom(code) {
-    const name = elements.browseName.value.trim();
-    if (!name) return showError('الرجاء إدخال اسمك');
-    state.playerName = name;
-    savePlayerName(name);
-    socket.emit('room:join', { roomCode: code, playerName: name });
+    socket.emit('room:join', { roomCode: code, playerName: state.username });
 }
 
 elements.refreshRoomsBtn.addEventListener('click', fetchPublicRooms);
 
 elements.createBtn.addEventListener('click', () => {
-    const name = elements.createName.value.trim();
-    if (!name) return showError('الرجاء إدخال اسمك');
-    state.playerName = name;
-    savePlayerName(name);
-    socket.emit('room:create', { playerName: name, settings: {} });
+    socket.emit('room:create', { playerName: state.username, settings: {} });
 });
 
 elements.joinBtn.addEventListener('click', () => {
-    const name = elements.joinName.value.trim();
     const code = elements.roomCodeInput.value.trim().toUpperCase();
-    if (!name) return showError('الرجاء إدخال اسمك');
     if (!code || code.length !== 6) return showError('الرجاء إدخال كود غرفة صحيح من 6 أحرف');
-    state.playerName = name;
-    savePlayerName(name);
-    socket.emit('room:join', { roomCode: code, playerName: name });
+    socket.emit('room:join', { roomCode: code, playerName: state.username });
 });
 
 elements.copyCodeBtn.addEventListener('click', () => {
@@ -335,57 +852,6 @@ function applySettings(settings) {
 
 setupSettingsHandlers();
 
-// ==================== SOCKET EVENTS - LOBBY ====================
-socket.on('room:created', ({ roomCode, players, settings }) => {
-    state.roomCode = roomCode;
-    state.isHost = true;
-    state.playerId = socket.id;
-    state.players = players;
-    elements.displayRoomCode.textContent = roomCode;
-    elements.startGameBtn.classList.remove('hidden');
-    elements.settingsPanel.classList.remove('hidden');
-    applySettings(settings);
-    updatePlayerList(players);
-    showScreen('waiting');
-});
-
-socket.on('room:joined', ({ roomCode, players, settings }) => {
-    state.roomCode = roomCode;
-    state.playerId = socket.id;
-    state.players = players;
-    elements.displayRoomCode.textContent = roomCode;
-    applySettings(settings);
-    updatePlayerList(players);
-    showScreen('waiting');
-});
-
-socket.on('room:error', (message) => {
-    showError(message);
-});
-
-socket.on('room:left', () => {
-    state.roomCode = null;
-    state.isHost = false;
-    state.players = [];
-    document.body.classList.remove('theme-day'); // Reset to night theme
-    showScreen('lobby');
-});
-
-socket.on('player:list', (players) => {
-    state.players = players;
-    updatePlayerList(players);
-});
-
-socket.on('host:assigned', () => {
-    state.isHost = true;
-    elements.startGameBtn.classList.remove('hidden');
-    elements.settingsPanel.classList.remove('hidden');
-});
-
-socket.on('settings:updated', (settings) => {
-    applySettings(settings);
-});
-
 function updatePlayerList(players) {
     elements.playerCount.textContent = players.length;
     elements.playerList.innerHTML = players.map((p, i) =>
@@ -396,44 +862,6 @@ function updatePlayerList(players) {
         elements.startGameBtn.disabled = players.length < 4;
     }
 }
-
-// ==================== SOCKET EVENTS - ROLE REVEAL ====================
-socket.on('role:assigned', ({ role, teammates }) => {
-    state.role = role;
-    state.teammates = teammates || [];
-    const info = ROLE_INFO[role];
-    elements.roleIcon.innerHTML = `<img src="${info.image}" alt="${info.name}" style="width: 80px; height: 80px; object-fit: contain;">`;
-    elements.roleName.textContent = info.name;
-
-    // If mafia with teammates, show them in description
-    if (role === 'mafia' && teammates && teammates.length > 0) {
-        const teammateNames = teammates.map(t => `${t.name} (#${t.playerNumber})`).join('، ');
-        elements.roleDescription.innerHTML = `${info.description}<br><br><strong>🔪 زملاؤك المافيا:</strong> ${teammateNames}`;
-    } else {
-        elements.roleDescription.textContent = info.description;
-    }
-
-    document.querySelector('.card-back').className = `card-face card-back role-${role}`;
-    elements.roleCard.classList.remove('flipped');
-    elements.readyBtn.disabled = true;
-    elements.readyBtn.textContent = "أنا جاهز";
-});
-
-socket.on('game:started', ({ players }) => {
-    state.players = players;
-    state.phase = 'roleReveal';
-    showScreen('role');
-});
-
-socket.on('game:reset', ({ players, settings }) => {
-    state.players = players;
-    state.phase = 'lobby';
-    state.role = null;
-    document.body.classList.remove('theme-day'); // Reset to night theme
-    applySettings(settings);
-    updatePlayerList(players);
-    showScreen('waiting');
-});
 
 elements.roleCard.addEventListener('click', () => {
     elements.roleCard.classList.toggle('flipped');
@@ -446,54 +874,6 @@ elements.readyBtn.addEventListener('click', () => {
     elements.readyBtn.disabled = true;
     elements.readyBtn.textContent = 'في الانتظار...';
     socket.emit('player:ready');
-});
-
-socket.on('player:readyUpdate', ({ readyCount, totalCount }) => {
-    elements.readyStatus.textContent = `${readyCount}/${totalCount} لاعب جاهز`;
-});
-
-// ==================== SOCKET EVENTS - NIGHT PHASE ====================
-socket.on('phase:night', ({ dayNumber, players, settings, currentTurn }) => {
-    state.players = players;
-    state.phase = 'night';
-    state.dayNumber = dayNumber;
-    state.hasActed = false;
-    state.selectedTarget = null;
-    state.currentTurn = currentTurn;
-    if (settings) state.settings = settings;
-
-    showPhaseTransition('night', dayNumber, () => {
-        document.body.classList.remove('theme-day');
-        elements.phaseBanner.innerHTML = `<span class="phase-icon">🌙</span><span class="phase-text">الليلة ${dayNumber}</span>`;
-        if (state.currentTurn) {
-            elements.phaseBanner.innerHTML += ` <span class="turn-indicator">| دور: ${state.currentTurn.name}</span>`;
-        }
-
-        updateActionPanel();
-        updateSpectatorUI();
-        renderSeats();
-        showScreen('game');
-    });
-});
-
-socket.on('turn:change', ({ playerId, playerNumber, name }) => {
-    state.currentTurn = playerId ? { playerId, playerNumber, name } : null;
-    state.hasActed = false; // Reset action state for new turn
-
-    // Update banner
-    const turnSpan = elements.phaseBanner.querySelector('.turn-indicator');
-    if (playerId && name) {
-        if (turnSpan) {
-            turnSpan.textContent = `| دور: ${name}`;
-        } else {
-            elements.phaseBanner.innerHTML += ` <span class="turn-indicator">| دور: ${name}</span>`;
-        }
-    } else if (turnSpan) {
-        turnSpan.remove(); // Remove indicator if turn is null
-    }
-
-    updateActionPanel();
-    renderSeats();
 });
 
 function updateActionPanel() {
@@ -665,162 +1045,54 @@ function handleSeatClick(seat) {
     }
 }
 
-elements.skipActionBtn.addEventListener('click', () => {
-    if (state.hasActed) return;
-    state.hasActed = true;
-
-    if (state.phase === 'night') {
-        // Citizen skipping night
-        socket.emit('night:skip');
-        elements.actionTitle.textContent = '✓ تم التخطي';
-        elements.actionHint.textContent = 'في انتظار اللاعبين الآخرين...';
-    } else {
-        // Day vote skip
-        socket.emit('day:skipVote');
-        elements.actionTitle.textContent = '✓ تم التخطي';
-        elements.actionHint.textContent = 'في انتظار الأصوات الأخرى...';
-    }
-    elements.skipActionBtn.style.display = 'none';
-});
-
-socket.on('night:actionConfirmed', () => {
-    // Action confirmed by server
-});
-
-// Detective investigation result - show card modal
-socket.on('detective:result', ({ targetName, isMafia }) => {
-    elements.investigationTarget.textContent = targetName;
-
-    const resultDiv = elements.investigationResult;
-    resultDiv.className = `investigation-result ${isMafia ? 'mafia' : 'innocent'}`;
-    resultDiv.innerHTML = isMafia
-        ? '<span class="result-icon">🔪</span><span class="result-text">مافيا!</span>'
-        : '<span class="result-icon">👤</span><span class="result-text">بريء</span>';
-
-    elements.detectiveModal.classList.remove('hidden');
-});
-
-elements.detectiveContinueBtn.addEventListener('click', () => {
-    elements.detectiveModal.classList.add('hidden');
-});
-
-socket.on('night:result', ({ killed, saved, roleStats, dayNumber }) => {
-    if (killed) {
-        elements.nightResultTitle.textContent = 'مأساة عند الفجر';
-        elements.nightResultText.textContent = `${killed.name} وُجد ميتاً هذا الصباح. المافيا ضربت.`;
-        addEvent('death', `💀 ${killed.name} قُتل على يد المافيا`, dayNumber);
-    } else if (saved) {
-        elements.nightResultTitle.textContent = 'معجزة!';
-        elements.nightResultText.textContent = 'الطبيب أنقذ شخصاً من هجوم المافيا الليلة الماضية!';
-        addEvent('safe', '💉 الطبيب أنقذ أحد اللاعبين من الموت', dayNumber);
-    } else {
-        elements.nightResultTitle.textContent = 'ليلة هادئة';
-        elements.nightResultText.textContent = 'استيقظت المدينة لتجد الجميع بخير.';
-        addEvent('night', '🌙 ليلة هادئة — لم يُقتل أحد', dayNumber);
-    }
-
-    if (roleStats) {
-        renderRoundSummary(elements.nightRoundSummary, roleStats);
-    }
-
-    elements.nightModal.classList.remove('hidden');
-});
-
-elements.nightContinueBtn.addEventListener('click', () => {
-    elements.nightModal.classList.add('hidden');
-});
-
-// ==================== SOCKET EVENTS - DAY PHASE ====================
-socket.on('phase:day', ({ dayNumber, players, currentTurn }) => {
-    state.players = players;
-    state.phase = 'day';
-    state.dayNumber = dayNumber;
-    state.hasActed = false;
-    state.selectedTarget = null;
-    state.currentTurn = currentTurn;
-
-    showPhaseTransition('day', dayNumber, () => {
-        document.body.classList.add('theme-day');
-        elements.phaseBanner.innerHTML = `<span class="phase-icon">☀️</span><span class="phase-text">اليوم ${dayNumber}</span>`;
-        if (state.currentTurn && state.currentTurn.name) {
-            elements.phaseBanner.innerHTML += ` <span class="turn-indicator">| دور: ${state.currentTurn.name}</span>`;
-        }
-
-        updateActionPanel();
-        updateSpectatorUI();
-        renderSeats();
-    });
-});
-
-socket.on('vote:update', ({ voteCount, requiredVotes }) => {
-    // Secret voting: only show progress, not who voted for whom
-    elements.actionHint.textContent = `${voteCount}/${requiredVotes} صوتوا`;
-});
-
-socket.on('vote:result', ({ eliminated, roleStats, dayNumber }) => {
-    // No vote breakdown - results are secret
-    elements.voteBreakdown.innerHTML = '';
-
-    if (eliminated) {
-        elements.voteResultTitle.textContent = '⚖️ قرار المدينة';
-        elements.voteResultText.textContent = `تم إخراج ${eliminated.name} من اللعبة.`;
-        addEvent('day', `⚖️ ${eliminated.name} أُخرج بالتصويت`, dayNumber);
-    } else {
-        elements.voteResultTitle.textContent = 'لم يتم الاتفاق';
-        elements.voteResultText.textContent = 'لم يتمكن اللاعبون من الاتفاق على قرار موحد. لم يتم إخراج أحد.';
-        addEvent('day', '🤷 لم يتفق اللاعبون — لم يُخرج أحد', dayNumber);
-    }
-
-    if (roleStats) {
-        renderRoundSummary(elements.voteRoundSummary, roleStats);
-    }
-
-    elements.voteModal.classList.remove('hidden');
-});
-
-elements.voteContinueBtn.addEventListener('click', () => {
-    elements.voteModal.classList.add('hidden');
-});
-
-// ==================== SOCKET EVENTS - GAME OVER ====================
-socket.on('game:over', ({ winner, message, players }) => {
-    state.phase = 'gameover';
-    document.body.classList.remove('theme-day'); // Reset to night theme
-
-    elements.winnerBanner.className = `winner-banner ${winner}`;
-    elements.winnerText.textContent = winner === 'mafia' ? 'المافيا تفوز!' : 'المدينة تفوز!';
-    elements.winnerMessage.textContent = message;
-
-    // Show play again button only to host
-    if (state.isHost) {
-        elements.playAgainBtn.classList.remove('hidden');
-    } else {
-        elements.playAgainBtn.classList.add('hidden');
-    }
-
-    elements.finalPlayerList.innerHTML = players.map(p => `
-        <li class="${p.alive ? '' : 'dead'}">
-            <span class="final-player-name">
-                ${p.alive ? '' : '💀'} ${p.name} ${p.id === state.playerId ? '(أنت)' : ''}
-            </span>
-            <span class="final-player-role ${p.role}">${ROLE_INFO[p.role].name}</span>
-        </li>
-    `).join('');
-
-    showScreen('gameover');
-});
-
-elements.playAgainBtn.addEventListener('click', () => {
+// = [GAME OVER EVENTS] =
+safeAddEvent(elements.playAgainBtn, 'click', () => {
     socket.emit('game:playAgain');
 });
 
-elements.leaveGameBtn.addEventListener('click', () => {
+safeAddEvent(elements.leaveGameBtn, 'click', () => {
     socket.emit('room:leave');
 });
 
-// Enable enter key for forms
-elements.createName.addEventListener('keypress', e => { if (e.key === 'Enter') elements.createBtn.click(); });
-elements.joinName.addEventListener('keypress', e => { if (e.key === 'Enter' && elements.roomCodeInput.value) elements.joinBtn.click(); });
-elements.roomCodeInput.addEventListener('keypress', e => { if (e.key === 'Enter') elements.joinBtn.click(); });
+// = [LOBBY EVENTS] =
+safeAddEvent(elements.createBtn, 'click', () => {
+    socket.emit('room:create', { playerName: state.username });
+});
 
-console.log('🎭 Mafia Game Client Loaded');
+safeAddEvent(elements.joinBtn, 'click', () => {
+    const code = elements.roomCodeInput.value.trim().toUpperCase();
+    if (!code || code.length !== 6) return showError('الرجاء إدخال كود غرفة صحيح من 6 أحرف');
+    socket.emit('room:join', { roomCode: code, playerName: state.username });
+});
+
+safeAddEvent(elements.refreshRoomsBtn, 'click', () => {
+    socket.emit('rooms:get');
+});
+
+safeAddEvent(elements.copyCodeBtn, 'click', () => {
+    const code = elements.displayRoomCode.textContent;
+    navigator.clipboard.writeText(code).then(() => {
+        const originalText = elements.copyCodeBtn.innerHTML;
+        elements.copyCodeBtn.innerHTML = '✅ نسخ';
+        setTimeout(() => elements.copyCodeBtn.innerHTML = originalText, 2000);
+    });
+});
+
+safeAddEvent(elements.leaveRoomBtn, 'click', () => {
+    socket.emit('room:leave');
+});
+
+safeAddEvent(elements.startGameBtn, 'click', () => {
+    socket.emit('game:start');
+});
+
+// Enable enter key for forms
+safeAddEvent(elements.roomCodeInput, 'keypress', e => { if (e.key === 'Enter') elements.joinBtn.click(); });
+safeAddEvent(elements.authUsername, 'keypress', e => { if (e.key === 'Enter') elements.authPassword.focus(); });
+safeAddEvent(elements.authPassword, 'keypress', e => { if (e.key === 'Enter') elements.authForm.dispatchEvent(new Event('submit')); });
+
+console.log('🎭 Mafia Game Client Loaded Successfully');
+console.log('--- Mafia App Script Execution Completed ---');
+
+// Start the application
+init();
