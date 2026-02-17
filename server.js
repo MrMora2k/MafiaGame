@@ -13,8 +13,16 @@ const io = new Server(server);
 const SECRET_KEY = 'mafia_ultra_secret_key_2026'; // In production, move to env
 
 app.use(express.json());
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve static files with no-cache headers
+app.use(express.static(path.join(__dirname, 'public'), {
+    etag: false,
+    lastModified: false,
+    setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+    }
+}));
 
 // Authentication API
 app.post('/api/register', async (req, res) => {

@@ -23,6 +23,35 @@
         href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700;900&family=Tajawal:wght@400;500;700;800&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
+
+    <!-- NUKE SERVICE WORKER & ALL CACHES -->
+    <script>
+        (async function () {
+            try {
+                // Unregister ALL service workers
+                if ('serviceWorker' in navigator) {
+                    const regs = await navigator.serviceWorker.getRegistrations();
+                    for (const reg of regs) {
+                        await reg.unregister();
+                        console.log('🗑️ Service Worker unregistered:', reg.scope);
+                    }
+                }
+                // Delete ALL caches
+                if ('caches' in window) {
+                    const names = await caches.keys();
+                    for (const name of names) {
+                        await caches.delete(name);
+                        console.log('🗑️ Cache deleted:', name);
+                    }
+                }
+                if (regs?.length || names?.length) {
+                    console.log('🔄 Caches cleared! Reloading...');
+                }
+            } catch (e) {
+                console.error('Cache cleanup error:', e);
+            }
+        })();
+    </script>
 </head>
 
 <body>
@@ -87,7 +116,7 @@
                             <h1 class="game-title-small">🎭 مافيا</h1>
                         </div>
                         <div class="header-right">
-                            <button class="btn btn-icon-text" id="profile-btn">
+                            <button class="btn btn-icon-text" id="profile-btn" onclick="showScreen('profile')">
                                 <span class="icon">👤</span>
                                 <span id="header-username">اسم المستخدم</span>
                             </button>
@@ -103,6 +132,11 @@
                         <button class="tab-btn" data-tab="join">الانضمام</button>
                         <button class="tab-btn" data-tab="browse">الغرف المتاحة</button>
                     </div>
+
+                    <!-- Profile Button -->
+                    <button id="open-profile-btn" onclick="showScreen('profile')"
+                        style="width:100%;padding:14px;margin-bottom:20px;background:linear-gradient(135deg,#7c5ef5,#5e8ef5);color:white;border:none;border-radius:14px;font-family:inherit;font-size:1rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;">👤
+                        الملف الشخصي</button>
 
                     <!-- Create Room Form -->
                     <div class="lobby-form" id="create-form">
@@ -334,44 +368,6 @@
                     </div>
                 </div>
 
-                <!-- Profile Modal -->
-                <div class="modal hidden" id="profile-modal">
-                    <div class="modal-content profile-card">
-                        <div class="profile-header">
-                            <div class="profile-avatar">👤</div>
-                            <h2 id="profile-username">User</h2>
-                            <span class="level-badge" id="profile-level">Lv 1</span>
-                        </div>
-
-                        <div class="xp-section">
-                            <div class="xp-header">
-                                <span>الخبرة (XP)</span>
-                                <span id="xp-text">0 / 0</span>
-                            </div>
-                            <div class="xp-bar-container">
-                                <div class="xp-bar-fill" id="xp-bar-fill" style="width: 0%"></div>
-                            </div>
-                        </div>
-
-                        <div class="profile-stats-grid">
-                            <div class="stat-item">
-                                <span class="stat-value" id="stats-games">0</span>
-                                <span class="stat-label">المباريات</span>
-                            </div>
-                            <div class="stat-item">
-                                <span class="stat-value" id="stats-wins">0</span>
-                                <span class="stat-label">الفوز</span>
-                            </div>
-                            <div class="stat-item">
-                                <span class="stat-value" id="stats-ratio">0%</span>
-                                <span class="stat-label">النسبة</span>
-                            </div>
-                        </div>
-
-                        <button class="btn btn-secondary w-full" id="close-profile-btn">إغلاق</button>
-                        <button class="btn btn-small w-full mt-2" id="logout-btn">تسجيل الخروج</button>
-                    </div>
-                </div>
             </section>
 
             <!-- ==================== GAME OVER SCREEN ==================== -->
@@ -396,59 +392,64 @@
                     </div>
                 </div>
             </section>
+
+            <!-- ==================== PROFILE SCREEN ==================== -->
+            <section id="profile-screen" class="screen">
+                <div class="profile-page-container">
+                    <!-- Back Button -->
+                    <button class="btn btn-secondary" onclick="showScreen('lobby')"
+                        style="align-self:flex-start;margin-bottom:20px;">→ رجوع للوبي</button>
+
+                    <!-- Profile Card -->
+                    <div class="profile-card">
+                        <!-- Avatar & Identity -->
+                        <div class="profile-avatar-section">
+                            <div class="profile-avatar">🎭</div>
+                            <h2 class="profile-name" id="profile-username">اسم المستخدم</h2>
+                            <span class="profile-level-badge" id="profile-level">Lv 1</span>
+                        </div>
+
+                        <!-- XP Progress Bar -->
+                        <div class="profile-xp-section">
+                            <div class="xp-label">
+                                <span>الخبرة</span>
+                                <span id="xp-text">0 / 100 XP</span>
+                            </div>
+                            <div class="xp-bar">
+                                <div class="xp-bar-fill" id="xp-bar-fill" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Stats Grid -->
+                        <div class="profile-stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-icon">🎮</div>
+                                <div class="stat-value" id="stats-games">0</div>
+                                <div class="stat-label">المباريات</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon">🏆</div>
+                                <div class="stat-value" id="stats-wins">0</div>
+                                <div class="stat-label">الانتصارات</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon">📊</div>
+                                <div class="stat-value" id="stats-ratio">0%</div>
+                                <div class="stat-label">نسبة الفوز</div>
+                            </div>
+                        </div>
+
+                        <!-- Logout -->
+                        <button class="btn btn-danger btn-large profile-logout-btn" id="logout-btn"
+                            onclick="if(typeof logout==='function')logout()">
+                            🚪 تسجيل الخروج
+                        </button>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
     <script src="/socket.io/socket.io.js"></script>
-
-    <!-- ==================== PROFILE MODAL ==================== -->
-    <div id="profile-modal" class="modal-overlay hidden">
-        <div class="profile-card">
-            <button class="profile-close-btn" id="close-profile-btn">✕</button>
-
-            <!-- Avatar & Identity -->
-            <div class="profile-avatar-section">
-                <div class="profile-avatar">🎭</div>
-                <h2 class="profile-name" id="profile-username">اسم المستخدم</h2>
-                <span class="profile-level-badge" id="profile-level">Lv 1</span>
-            </div>
-
-            <!-- XP Progress Bar -->
-            <div class="profile-xp-section">
-                <div class="xp-label">
-                    <span>الخبرة</span>
-                    <span id="xp-text">0 / 100 XP</span>
-                </div>
-                <div class="xp-bar">
-                    <div class="xp-bar-fill" id="xp-bar-fill" style="width: 0%"></div>
-                </div>
-            </div>
-
-            <!-- Stats Grid -->
-            <div class="profile-stats-grid">
-                <div class="stat-card">
-                    <div class="stat-icon">🎮</div>
-                    <div class="stat-value" id="stats-games">0</div>
-                    <div class="stat-label">المباريات</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">🏆</div>
-                    <div class="stat-value" id="stats-wins">0</div>
-                    <div class="stat-label">الانتصارات</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon">📊</div>
-                    <div class="stat-value" id="stats-ratio">0%</div>
-                    <div class="stat-label">نسبة الفوز</div>
-                </div>
-            </div>
-
-            <!-- Logout -->
-            <button class="btn btn-danger btn-large profile-logout-btn" id="logout-btn">
-                🚪 تسجيل الخروج
-            </button>
-        </div>
-    </div>
-
     <script src="app.js"></script>
 </body>
 

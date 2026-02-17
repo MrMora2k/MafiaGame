@@ -8,7 +8,7 @@ if ('serviceWorker' in navigator) {
     });
 }
 */
-console.log('--- Mafia App Script Execution Started ---');
+console.log('--- Mafia App Script Execution Started --- VERSION 2.0 ---');
 
 // ==================== SOCKET & STATE ====================
 let socket;
@@ -55,6 +55,7 @@ const elements = {
     roleScreen: document.getElementById('role-screen'),
     gameScreen: document.getElementById('game-screen'),
     gameoverScreen: document.getElementById('gameover-screen'),
+    profileScreen: document.getElementById('profile-screen'),
     progressionSummary: document.getElementById('progression-summary'),
     createName: document.getElementById('create-name'),
     joinName: document.getElementById('join-name'),
@@ -321,30 +322,73 @@ function connectSocket() {
 }
 
 function updateProfileUI() {
-    if (!state.user) return;
+    console.log('[PROFILE] updateProfileUI called. state.user:', state.user, 'state.username:', state.username);
 
-    elements.headerUsername.textContent = state.username;
-    elements.profileUsername.textContent = state.username;
+    const username = state.username || (state.user && state.user.username) || '';
+
+    // Direct DOM lookups instead of elements cache
+    const elHeaderUsername = document.getElementById('header-username');
+    const elProfileUsername = document.getElementById('profile-username');
+    const elProfileLevel = document.getElementById('profile-level');
+    const elXpText = document.getElementById('xp-text');
+    const elXpBarFill = document.getElementById('xp-bar-fill');
+    const elStatsGames = document.getElementById('stats-games');
+    const elStatsWins = document.getElementById('stats-wins');
+    const elStatsRatio = document.getElementById('stats-ratio');
+
+    console.log('[PROFILE] DOM elements found:', {
+        headerUsername: !!elHeaderUsername,
+        profileUsername: !!elProfileUsername,
+        profileLevel: !!elProfileLevel
+    });
+
+    if (username) {
+        console.log('[PROFILE] === USERNAME UPDATE ===');
+        console.log('[PROFILE] username value:', JSON.stringify(username));
+        console.log('[PROFILE] elProfileUsername:', elProfileUsername);
+        console.log('[PROFILE] elProfileUsername tag:', elProfileUsername?.tagName, 'id:', elProfileUsername?.id);
+        console.log('[PROFILE] BEFORE textContent:', JSON.stringify(elProfileUsername?.textContent));
+        if (elHeaderUsername) elHeaderUsername.textContent = username;
+        if (elProfileUsername) {
+            elProfileUsername.textContent = username;
+            console.log('[PROFILE] AFTER textContent:', JSON.stringify(elProfileUsername.textContent));
+            console.log('[PROFILE] AFTER innerHTML:', elProfileUsername.innerHTML);
+            console.log('[PROFILE] Element outerHTML:', elProfileUsername.outerHTML);
+        }
+    }
+
+    if (!state.user) {
+        if (state.token) {
+            fetch('/api/me', {
+                headers: { 'Authorization': `Bearer ${state.token}` }
+            }).then(r => r.json()).then(data => {
+                if (data.success && data.user) {
+                    state.user = data.user;
+                    state.username = data.user.username;
+                    updateProfileUI();
+                }
+            }).catch(err => console.error('[PROFILE] Failed to fetch user:', err));
+        }
+        return;
+    }
 
     const level = state.user.level || 1;
-    elements.profileLevel.textContent = `Lv ${level}`;
+    if (elProfileLevel) elProfileLevel.textContent = `Lv ${level}`;
 
     const xp = state.user.total_xp || 0;
     const currentLevelXP = Math.pow((level - 1), 2) * 100;
     const nextLevelXP = Math.pow(level, 2) * 100;
-
-    // Total XP formula for progress bar
     const progress = nextLevelXP > currentLevelXP
         ? ((xp - currentLevelXP) / (nextLevelXP - currentLevelXP)) * 100
         : 100;
 
-    elements.xpText.textContent = `${xp} / ${nextLevelXP} XP`;
-    elements.xpBarFill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
+    if (elXpText) elXpText.textContent = `${xp} / ${nextLevelXP} XP`;
+    if (elXpBarFill) elXpBarFill.style.width = `${Math.min(100, Math.max(0, progress))}%`;
 
-    elements.statsGames.textContent = state.user.games_played || 0;
-    elements.statsWins.textContent = state.user.wins || 0;
+    if (elStatsGames) elStatsGames.textContent = state.user.games_played || 0;
+    if (elStatsWins) elStatsWins.textContent = state.user.wins || 0;
     const ratio = state.user.games_played > 0 ? Math.round((state.user.wins / state.user.games_played) * 100) : 0;
-    elements.statsRatio.textContent = `${ratio}%`;
+    if (elStatsRatio) elStatsRatio.textContent = `${ratio}%`;
 }
 
 function logout() {
@@ -456,7 +500,8 @@ function showScreen(screenName) {
         waiting: elements.waitingScreen,
         role: elements.roleScreen,
         game: elements.gameScreen,
-        gameOver: elements.gameoverScreen
+        gameOver: elements.gameoverScreen,
+        profile: elements.profileScreen
     };
 
     // Deactivate all screens
@@ -473,6 +518,8 @@ function showScreen(screenName) {
     if (target) {
         target.classList.add('active');
         console.log(`[NAV] Switched to: ${screenName}`);
+        // Update profile UI when navigating to profile
+        if (screenName === 'profile') updateProfileUI();
     } else {
         console.error(`[NAV] Screen not found in map: ${screenName}`);
     }

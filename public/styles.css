@@ -801,6 +801,14 @@ select {
     }
 }
 
+.profile-page-container {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
 .profile-card {
     background: linear-gradient(145deg, rgba(30, 25, 50, 0.95), rgba(15, 12, 30, 0.98));
     border: 1px solid rgba(124, 94, 245, 0.3);
