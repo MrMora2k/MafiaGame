@@ -601,6 +601,66 @@ function getSortedAlivePlayers(room) {
         .sort((a, b) => a.playerNumber - b.playerNumber);
 }
 
+// Auto-complete remaining actions for the night phase
+function autoCompleteNightActions(room) {
+    console.log(`[TIMER] Auto-completing night actions for room ${room.code}`);
+    const alivePlayers = room.players.filter(p => p.alive);
+
+    // Determine which roles are still needed to act
+    // In turn-based, we look at currentTurnPlayerId and everyone after them
+    const sortedAlive = getSortedAlivePlayers(room);
+    const currentIndex = sortedAlive.findIndex(p => p.id === room.currentTurnPlayerId);
+
+    const remainingPlayers = currentIndex === -1 ? sortedAlive : sortedAlive.slice(currentIndex);
+
+    remainingPlayers.forEach(player => {
+        // Skip if already acted (though in sequential, they shouldn't have)
+        const role = player.role;
+
+        if (role === ROLES.MAFIA) {
+            // Smart/Random Kill: Favor teammates' targets, otherwise pick random Town
+            let targetId = null;
+            const existingMafiaActions = room.nightActions[ROLES.MAFIA] || [];
+            if (existingMafiaActions.length > 0) {
+                targetId = existingMafiaActions[0].target;
+            } else {
+                const townies = alivePlayers.filter(p => p.role !== ROLES.MAFIA);
+                if (townies.length > 0) {
+                    targetId = townies[Math.floor(Math.random() * townies.length)].id;
+                }
+            }
+
+            if (targetId) {
+                room.nightActions[ROLES.MAFIA] = room.nightActions[ROLES.MAFIA] || [];
+                room.nightActions[ROLES.MAFIA].push({ actor: player.id, target: targetId });
+                console.log(`[AUTO] Mafia ${player.name} auto-targeted ${targetId}`);
+            }
+        } else if (role === ROLES.DOCTOR || role === ROLES.DETECTIVE || role === ROLES.CITIZEN) {
+            // Auto-skip for Town roles
+            room.nightActions['skips'] = room.nightActions['skips'] || [];
+            room.nightActions['skips'].push(player.id);
+            console.log(`[AUTO] Role ${role} (${player.name}) auto-skipped`);
+        }
+    });
+
+    room.currentTurnPlayerId = null;
+}
+
+// Auto-complete remaining votes for the day phase
+function autoCompleteDayVotes(room) {
+    console.log(`[TIMER] Auto-completing day votes for room ${room.code}`);
+    const alivePlayers = room.players.filter(p => p.alive);
+
+    alivePlayers.forEach(player => {
+        if (!room.votes[player.id]) {
+            room.votes[player.id] = 'skip';
+            console.log(`[AUTO] Player ${player.name} auto-voted skip`);
+        }
+    });
+
+    room.currentTurnPlayerId = null;
+}
+
 // Timer management
 const roomTimers = new Map();
 
@@ -680,6 +740,7 @@ function startNightPhase(room) {
     // Start Phase Timer
     startRoomTimer(room, room.settings.nightTimer, () => {
         console.log(`[TIMER] Night phase timed out for ${room.code}. Resolving...`);
+        autoCompleteNightActions(room);
         resolveNight(room);
     });
 
@@ -808,6 +869,7 @@ function startDayPhase(room) {
     // Start Phase Timer
     startRoomTimer(room, room.settings.dayTimer, () => {
         console.log(`[TIMER] Day phase timed out for ${room.code}. Resolving...`);
+        autoCompleteDayVotes(room);
         resolveDayVoting(room);
     });
 
