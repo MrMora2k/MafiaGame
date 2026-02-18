@@ -1103,6 +1103,30 @@ function handleSeatClick(seat) {
     }
 }
 
+// = [GAME ACTION EVENTS] =
+safeAddEvent(elements.skipActionBtn, 'click', () => {
+    if (state.hasActed) return;
+    const isMyTurn = state.currentTurn && state.currentTurn.playerId === state.playerId;
+    if (!isMyTurn) return;
+
+    console.log(`[ACTION] Skipping turn in phase: ${state.phase}`);
+    state.hasActed = true;
+    elements.skipActionBtn.style.display = 'none';
+
+    if (state.phase === 'night') {
+        socket.emit('night:skip');
+        elements.actionTitle.textContent = '💤 تخطيت الدور';
+    } else if (state.phase === 'day') {
+        socket.emit('day:skipVote');
+        elements.actionTitle.textContent = '✓ تخطيت التصويت';
+    }
+
+    elements.actionHint.textContent = 'في انتظار اللاعبين الآخرين...';
+
+    // Clear selections if any
+    document.querySelectorAll('.player-seat').forEach(s => s.classList.remove('selected'));
+});
+
 // = [GAME OVER EVENTS] =
 safeAddEvent(elements.playAgainBtn, 'click', () => {
     socket.emit('game:playAgain');
