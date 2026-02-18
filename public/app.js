@@ -150,16 +150,6 @@ const elements = {
     headerLogoutBtn: document.getElementById('header-logout-btn')
 };
 
-// ==================== INITIALIZE ====================
-function init() {
-    if (state.token) {
-        checkAuth('init');
-    } else {
-        showScreen('auth');
-    }
-}
-
-
 // ==================== ERROR HANDLING & UTILS ====================
 window.onerror = function (msg, url, lineNo, columnNo, error) {
     const string = msg.toLowerCase();
@@ -597,6 +587,25 @@ function setupSocketEvents() {
     socket.on('player:list', (players) => {
         state.players = players;
         updatePlayerList(players);
+    });
+
+    // Timer logic
+    socket.on('timer:sync', ({ duration, phase }) => {
+        console.log(`[TIMER] Received sync: ${duration}s for ${phase}`);
+        startLocalTimer(duration, phase);
+    });
+
+    socket.on('phase:night', () => {
+        if (localTimerInterval) clearInterval(localTimerInterval);
+    });
+
+    socket.on('phase:day', () => {
+        if (localTimerInterval) clearInterval(localTimerInterval);
+    });
+
+    socket.on('game:over', (data) => {
+        if (localTimerInterval) clearInterval(localTimerInterval);
+        elements.phaseTimer.classList.add('hidden');
     });
 
     socket.on('host:assigned', () => {
@@ -1270,47 +1279,20 @@ function startLocalTimer(duration, phase) {
     }, 1000);
 }
 
-// Socket Timer Sync
-socket.on('timer:sync', ({ duration, phase }) => {
-    console.log(`[TIMER] Received sync: ${duration}s for ${phase}`);
-    startLocalTimer(duration, phase);
-});
-
-// Clear timer on phase changes in case of natural finish
-socket.on('phase:night', () => { if (localTimerInterval) clearInterval(localTimerInterval); });
-socket.on('phase:day', () => { if (localTimerInterval) clearInterval(localTimerInterval); });
-socket.on('game:over', () => {
-    if (localTimerInterval) clearInterval(localTimerInterval);
-    elements.phaseTimer.classList.add('hidden');
-});
-
-// Start the application
-init();
-
-// Corrected Progression Handler (Overrides previous definition)
 function handleProgression(data) {
     if (!state.user) return;
-
-    // Check for level up before updating state
     const isLevelUp = data.newLevel > (state.user.level || 1);
-
-    // Update local state
     state.user.total_xp = data.newXp;
     state.user.level = data.newLevel;
     updateProfileUI();
 
-    // Show sequence in Game Over screen
     if (elements.progressionSummary) {
         elements.progressionSummary.innerHTML = '';
         elements.progressionSummary.classList.add('visible');
-
-        // XP Gain
         const xpEl = document.createElement('div');
         xpEl.className = 'xp-gain';
         xpEl.innerHTML = `<span class="icon">✨</span> <span>+${data.xpEarned} XP</span>`;
         elements.progressionSummary.appendChild(xpEl);
-
-        // Level Up Animation
         if (isLevelUp) {
             const lvlEl = document.createElement('div');
             lvlEl.className = 'level-up-message';
@@ -1319,3 +1301,6 @@ function handleProgression(data) {
         }
     }
 }
+
+// Start the application
+init();
