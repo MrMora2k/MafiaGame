@@ -500,7 +500,7 @@ function showScreen(screenName) {
         waiting: elements.waitingScreen,
         role: elements.roleScreen,
         game: elements.gameScreen,
-        gameOver: elements.gameoverScreen,
+        gameover: elements.gameoverScreen,
         profile: elements.profileScreen
     };
 
