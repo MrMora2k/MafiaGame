@@ -1127,6 +1127,19 @@ safeAddEvent(elements.skipActionBtn, 'click', () => {
     document.querySelectorAll('.player-seat').forEach(s => s.classList.remove('selected'));
 });
 
+// Modal Continue Listeners
+safeAddEvent(elements.nightContinueBtn, 'click', () => {
+    elements.nightModal.classList.add('hidden');
+});
+
+safeAddEvent(elements.detectiveContinueBtn, 'click', () => {
+    elements.detectiveModal.classList.add('hidden');
+});
+
+safeAddEvent(elements.voteContinueBtn, 'click', () => {
+    elements.voteModal.classList.add('hidden');
+});
+
 // = [GAME OVER EVENTS] =
 safeAddEvent(elements.playAgainBtn, 'click', () => {
     socket.emit('game:playAgain');
