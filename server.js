@@ -728,9 +728,10 @@ function startNightPhase(room) {
     room.nightActions = {};
     room.players.forEach(p => p.ready = false);
 
-    // Initial timer for the first turn is handled in advanceTurn if we call it, 
-    // but here we set room.currentTurnPlayerId manually. 
-    // Let's call a specific function or just start the timer here for the first player.
+    // Initialize turn
+    const sortedAlive = getSortedAlivePlayers(room);
+
+    // Initial timer for the first turn
     const duration = room.settings.nightTimer;
     if (duration > 0 && sortedAlive.length > 0) {
         startRoomTimer(room, duration, () => {
@@ -752,8 +753,6 @@ function startNightPhase(room) {
         })), null, 2)
     );
 
-    // Initialize turn
-    const sortedAlive = getSortedAlivePlayers(room);
     console.log(`[DEBUG] Night Play Order Room ${room.code}:`, sortedAlive.map(p => `${p.name}(#${p.playerNumber})`));
 
     if (sortedAlive.length > 0) {
@@ -863,6 +862,9 @@ function startDayPhase(room) {
     room.phase = PHASES.DAY;
     room.votes = {};
 
+    // Initialize turn
+    const sortedAlive = getSortedAlivePlayers(room);
+
     // Start Turn Timer for first player
     const duration = room.settings.dayTimer;
     if (duration > 0 && sortedAlive.length > 0) {
@@ -874,8 +876,6 @@ function startDayPhase(room) {
         });
     }
 
-    // Initialize turn
-    const sortedAlive = getSortedAlivePlayers(room);
     console.log(`[DEBUG] Day Play Order Room ${room.code}:`, sortedAlive.map(p => `${p.name}(#${p.playerNumber})`));
 
     if (sortedAlive.length > 0) {
