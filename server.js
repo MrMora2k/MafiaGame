@@ -601,22 +601,12 @@ function getSortedAlivePlayers(room) {
         .sort((a, b) => a.playerNumber - b.playerNumber);
 }
 
-// Auto-complete remaining actions for the night phase
-function autoCompleteNightActions(room) {
-    console.log(`[TIMER] Auto-completing night actions for room ${room.code}`);
-    const alivePlayers = room.players.filter(p => p.alive);
+// Auto-complete action for the current turn player
+function autoCompleteCurrentTurnAction(room, player) {
+    console.log(`[TIMER] Auto-completing turn for ${player.name} in room ${room.code} (${room.phase})`);
 
-    // Determine which roles are still needed to act
-    // In turn-based, we look at currentTurnPlayerId and everyone after them
-    const sortedAlive = getSortedAlivePlayers(room);
-    const currentIndex = sortedAlive.findIndex(p => p.id === room.currentTurnPlayerId);
-
-    const remainingPlayers = currentIndex === -1 ? sortedAlive : sortedAlive.slice(currentIndex);
-
-    remainingPlayers.forEach(player => {
-        // Skip if already acted (though in sequential, they shouldn't have)
+    if (room.phase === PHASES.NIGHT) {
         const role = player.role;
-
         if (role === ROLES.MAFIA) {
             // Smart/Random Kill: Favor teammates' targets, otherwise pick random Town
             let targetId = null;
@@ -624,6 +614,7 @@ function autoCompleteNightActions(room) {
             if (existingMafiaActions.length > 0) {
                 targetId = existingMafiaActions[0].target;
             } else {
+                const alivePlayers = room.players.filter(p => p.alive);
                 const townies = alivePlayers.filter(p => p.role !== ROLES.MAFIA);
                 if (townies.length > 0) {
                     targetId = townies[Math.floor(Math.random() * townies.length)].id;
@@ -635,31 +626,23 @@ function autoCompleteNightActions(room) {
                 room.nightActions[ROLES.MAFIA].push({ actor: player.id, target: targetId });
                 console.log(`[AUTO] Mafia ${player.name} auto-targeted ${targetId}`);
             }
-        } else if (role === ROLES.DOCTOR || role === ROLES.DETECTIVE || role === ROLES.CITIZEN) {
-            // Auto-skip for Town roles
+        } else {
+            // Auto-skip for Town roles (Doctor, Detective, Citizen)
             room.nightActions['skips'] = room.nightActions['skips'] || [];
-            room.nightActions['skips'].push(player.id);
+            if (!room.nightActions['skips'].includes(player.id)) {
+                room.nightActions['skips'].push(player.id);
+            }
             console.log(`[AUTO] Role ${role} (${player.name}) auto-skipped`);
         }
-    });
-
-    room.currentTurnPlayerId = null;
-}
-
-// Auto-complete remaining votes for the day phase
-function autoCompleteDayVotes(room) {
-    console.log(`[TIMER] Auto-completing day votes for room ${room.code}`);
-    const alivePlayers = room.players.filter(p => p.alive);
-
-    alivePlayers.forEach(player => {
+    } else if (room.phase === PHASES.DAY) {
+        // Auto-skip vote for Day phase turn
         if (!room.votes[player.id]) {
             room.votes[player.id] = 'skip';
             console.log(`[AUTO] Player ${player.name} auto-voted skip`);
         }
-    });
-
-    room.currentTurnPlayerId = null;
+    }
 }
+
 
 // Timer management
 const roomTimers = new Map();
@@ -726,7 +709,15 @@ function advanceTurn(room) {
             name: nextPlayer.name
         });
 
-        // Timer for turn? Optional. For now, manual.
+        // Start Turn Timer
+        const duration = room.phase === PHASES.NIGHT ? room.settings.nightTimer : room.settings.dayTimer;
+        if (duration > 0) {
+            startRoomTimer(room, duration, () => {
+                console.log(`[TIMER] Turn timed out for ${nextPlayer.name} (#${nextPlayer.playerNumber})`);
+                autoCompleteCurrentTurnAction(room, nextPlayer);
+                advanceTurn(room);
+            });
+        }
     }
 }
 
@@ -737,12 +728,18 @@ function startNightPhase(room) {
     room.nightActions = {};
     room.players.forEach(p => p.ready = false);
 
-    // Start Phase Timer
-    startRoomTimer(room, room.settings.nightTimer, () => {
-        console.log(`[TIMER] Night phase timed out for ${room.code}. Resolving...`);
-        autoCompleteNightActions(room);
-        resolveNight(room);
-    });
+    // Initial timer for the first turn is handled in advanceTurn if we call it, 
+    // but here we set room.currentTurnPlayerId manually. 
+    // Let's call a specific function or just start the timer here for the first player.
+    const duration = room.settings.nightTimer;
+    if (duration > 0 && sortedAlive.length > 0) {
+        startRoomTimer(room, duration, () => {
+            const firstPlayer = sortedAlive[0];
+            console.log(`[TIMER] First night turn timed out for ${firstPlayer.name}`);
+            autoCompleteCurrentTurnAction(room, firstPlayer);
+            advanceTurn(room);
+        });
+    }
 
     // DEBUG: Log all players state
     console.log(`[DEBUG] startNightPhase Room ${room.code} - Players Dump:`,
@@ -866,12 +863,16 @@ function startDayPhase(room) {
     room.phase = PHASES.DAY;
     room.votes = {};
 
-    // Start Phase Timer
-    startRoomTimer(room, room.settings.dayTimer, () => {
-        console.log(`[TIMER] Day phase timed out for ${room.code}. Resolving...`);
-        autoCompleteDayVotes(room);
-        resolveDayVoting(room);
-    });
+    // Start Turn Timer for first player
+    const duration = room.settings.dayTimer;
+    if (duration > 0 && sortedAlive.length > 0) {
+        startRoomTimer(room, duration, () => {
+            const firstPlayer = sortedAlive[0];
+            console.log(`[TIMER] First day turn timed out for ${firstPlayer.name}`);
+            autoCompleteCurrentTurnAction(room, firstPlayer);
+            advanceTurn(room);
+        });
+    }
 
     // Initialize turn
     const sortedAlive = getSortedAlivePlayers(room);
