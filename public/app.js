@@ -122,6 +122,11 @@ const elements = {
     nightRoundSummary: document.getElementById('night-round-summary'),
     voteRoundSummary: document.getElementById('vote-round-summary'),
 
+    // Timer Settings
+    settingNightTimer: document.getElementById('setting-night-timer'),
+    settingDayTimer: document.getElementById('setting-day-timer'),
+    phaseTimer: document.getElementById('phase-timer'),
+
     // Auth & Profile
     authForm: document.getElementById('auth-form'),
     authUsername: document.getElementById('auth-username'),
@@ -882,6 +887,8 @@ function setupSettingsHandlers() {
     elements.settingDetectives.addEventListener('change', updateSettings);
     elements.settingSelfHeal.addEventListener('change', updateSettings);
     elements.settingPublic.addEventListener('change', updateSettings);
+    elements.settingNightTimer.addEventListener('change', updateSettings);
+    elements.settingDayTimer.addEventListener('change', updateSettings);
 }
 
 function updateSettings() {
@@ -892,7 +899,9 @@ function updateSettings() {
         doctorCount: parseInt(elements.settingDoctors.value),
         detectiveCount: parseInt(elements.settingDetectives.value),
         doctorSelfHeal: elements.settingSelfHeal.checked,
-        isPublic: elements.settingPublic.checked
+        isPublic: elements.settingPublic.checked,
+        nightTimer: parseInt(elements.settingNightTimer.value),
+        dayTimer: parseInt(elements.settingDayTimer.value)
     };
     socket.emit('room:updateSettings', settings);
 }
@@ -906,6 +915,8 @@ function applySettings(settings) {
     elements.settingDetectives.value = settings.detectiveCount;
     elements.settingSelfHeal.checked = settings.doctorSelfHeal;
     elements.settingPublic.checked = settings.isPublic || false;
+    elements.settingNightTimer.value = settings.nightTimer || 60;
+    elements.settingDayTimer.value = settings.dayTimer || 120;
 }
 
 setupSettingsHandlers();
@@ -1220,6 +1231,58 @@ function handleProgression(data) {
         }
     }
 }
+
+// Timer logic
+let localTimerInterval = null;
+
+function startLocalTimer(duration, phase) {
+    if (localTimerInterval) clearInterval(localTimerInterval);
+    if (duration <= 0) {
+        elements.phaseTimer.classList.add('hidden');
+        return;
+    }
+
+    elements.phaseTimer.classList.remove('hidden');
+    let timeLeft = duration;
+
+    const updateDisplay = () => {
+        const mins = Math.floor(timeLeft / 60);
+        const secs = timeLeft % 60;
+        elements.phaseTimer.textContent = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+
+        // Add warning class if < 10s
+        if (timeLeft <= 10) {
+            elements.phaseTimer.classList.add('warning');
+        } else {
+            elements.phaseTimer.classList.remove('warning');
+        }
+    };
+
+    updateDisplay();
+    localTimerInterval = setInterval(() => {
+        timeLeft--;
+        if (timeLeft <= 0) {
+            clearInterval(localTimerInterval);
+            elements.phaseTimer.textContent = "00:00";
+        } else {
+            updateDisplay();
+        }
+    }, 1000);
+}
+
+// Socket Timer Sync
+socket.on('timer:sync', ({ duration, phase }) => {
+    console.log(`[TIMER] Received sync: ${duration}s for ${phase}`);
+    startLocalTimer(duration, phase);
+});
+
+// Clear timer on phase changes in case of natural finish
+socket.on('phase:night', () => { if (localTimerInterval) clearInterval(localTimerInterval); });
+socket.on('phase:day', () => { if (localTimerInterval) clearInterval(localTimerInterval); });
+socket.on('game:over', () => {
+    if (localTimerInterval) clearInterval(localTimerInterval);
+    elements.phaseTimer.classList.add('hidden');
+});
 
 // Start the application
 init();

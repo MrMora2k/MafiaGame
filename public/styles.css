@@ -665,6 +665,44 @@ select {
     display: none;
 }
 
+/* Phase Timer */
+.phase-timer {
+    margin-right: 15px;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 2px 12px;
+    border-radius: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--accent-light);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    letter-spacing: 1px;
+}
+
+.phase-timer.warning {
+    color: #ff4757;
+    background: rgba(255, 71, 87, 0.1);
+    border-color: rgba(255, 71, 87, 0.3);
+    animation: pulse-red 1s infinite;
+}
+
+@keyframes pulse-red {
+    0% {
+        opacity: 1;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 0.7;
+        transform: scale(1.05);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
 /* ==================== LOBBY HEADER ==================== */
 .lobby-container {
     width: 100%;

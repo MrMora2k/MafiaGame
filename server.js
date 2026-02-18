@@ -129,7 +129,9 @@ const DEFAULT_SETTINGS = {
     doctorCount: 1,
     detectiveCount: 1,
     doctorSelfHeal: true,
-    isPublic: false
+    isPublic: false,
+    nightTimer: 60,
+    dayTimer: 120
 };
 
 // Generate a random 6-character room code
@@ -599,6 +601,35 @@ function getSortedAlivePlayers(room) {
         .sort((a, b) => a.playerNumber - b.playerNumber);
 }
 
+// Timer management
+const roomTimers = new Map();
+
+function clearRoomTimer(roomCode) {
+    if (roomTimers.has(roomCode)) {
+        clearTimeout(roomTimers.get(roomCode));
+        roomTimers.delete(roomCode);
+        console.log(`[TIMER] Cleared timer for room ${roomCode}`);
+    }
+}
+
+function startRoomTimer(room, duration, onExpire) {
+    clearRoomTimer(room.code);
+    if (duration <= 0) return;
+
+    console.log(`[TIMER] Starting ${duration}s timer for room ${room.code}`);
+
+    // Sync with clients
+    io.to(room.code).emit('timer:sync', { duration, phase: room.phase });
+
+    const timerId = setTimeout(() => {
+        console.log(`[TIMER] Timer expired for room ${room.code}, phase ${room.phase}`);
+        roomTimers.delete(room.code);
+        onExpire();
+    }, duration * 1000);
+
+    roomTimers.set(room.code, timerId);
+}
+
 // Advance turn to the next player
 function advanceTurn(room) {
     const sortedAlive = getSortedAlivePlayers(room);
@@ -616,6 +647,7 @@ function advanceTurn(room) {
         // End of turns for this phase
         console.log(`[DEBUG] Final player acted in phase ${room.phase}. Resolving phase...`);
         room.currentTurnPlayerId = null;
+        clearRoomTimer(room.code); // Stop timer when naturally finished
         io.to(room.code).emit('turn:change', { playerId: null });
 
         if (room.phase === PHASES.NIGHT) {
@@ -644,6 +676,12 @@ function startNightPhase(room) {
     room.dayNumber++;
     room.nightActions = {};
     room.players.forEach(p => p.ready = false);
+
+    // Start Phase Timer
+    startRoomTimer(room, room.settings.nightTimer, () => {
+        console.log(`[TIMER] Night phase timed out for ${room.code}. Resolving...`);
+        resolveNight(room);
+    });
 
     // DEBUG: Log all players state
     console.log(`[DEBUG] startNightPhase Room ${room.code} - Players Dump:`,
@@ -767,6 +805,12 @@ function startDayPhase(room) {
     room.phase = PHASES.DAY;
     room.votes = {};
 
+    // Start Phase Timer
+    startRoomTimer(room, room.settings.dayTimer, () => {
+        console.log(`[TIMER] Day phase timed out for ${room.code}. Resolving...`);
+        resolveDayVoting(room);
+    });
+
     // Initialize turn
     const sortedAlive = getSortedAlivePlayers(room);
     console.log(`[DEBUG] Day Play Order Room ${room.code}:`, sortedAlive.map(p => `${p.name}(#${p.playerNumber})`));
@@ -838,6 +882,7 @@ function resolveDayVoting(room) {
 async function resolveGameOver(room, result) {
     room.phase = PHASES.GAME_OVER; // Fixed enum key
     room.currentTurnPlayerId = null;
+    clearRoomTimer(room.code); // Stop any active timers
 
     console.log(`[GAME] Resolving Game Over for room ${room.code}. Winner: ${result.winner}`);
 

@@ -229,6 +229,30 @@
                                     <option value="2">2</option>
                                 </select>
                             </div>
+                            <div class="setting-item">
+                                <label>وقت الليل (ثانية)</label>
+                                <select id="setting-night-timer">
+                                    <option value="0">غير محدود</option>
+                                    <option value="30">30ث</option>
+                                    <option value="45">45ث</option>
+                                    <option value="60" selected>60ث</option>
+                                    <option value="90">90ث</option>
+                                    <option value="120">120ث</option>
+                                    <option value="180">3د</option>
+                                </select>
+                            </div>
+                            <div class="setting-item">
+                                <label>وقت النهار (ثانية)</label>
+                                <select id="setting-day-timer">
+                                    <option value="0">غير محدود</option>
+                                    <option value="30">30ث</option>
+                                    <option value="60">60ث</option>
+                                    <option value="90">90ث</option>
+                                    <option value="120" selected>120ث</option>
+                                    <option value="180">3د</option>
+                                    <option value="300">5د</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="setting-toggle">
                             <label class="toggle-label">
@@ -294,6 +318,7 @@
                 <div class="phase-banner" id="phase-banner">
                     <span class="phase-icon">🌙</span>
                     <span class="phase-text">الليلة 1</span>
+                    <span class="phase-timer hidden" id="phase-timer">00:00</span>
                 </div>
 
                 <!-- Round Table Container -->
