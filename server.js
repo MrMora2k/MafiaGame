@@ -924,7 +924,8 @@ function resolveDayVoting(room) {
     io.to(room.code).emit('vote:result', {
         eliminated: eliminatedPlayer ? {
             id: eliminatedPlayer.id,
-            name: eliminatedPlayer.name
+            name: eliminatedPlayer.name,
+            role: eliminatedPlayer.role // Added role for sound triggers
         } : null,
         roleStats: getRoleStats(room),
         dayNumber: room.dayNumber

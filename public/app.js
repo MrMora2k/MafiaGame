@@ -37,6 +37,22 @@ const ROLE_INFO = {
     citizen: { icon: '👤', image: 'images/Citizen.png', name: 'مواطن', description: 'اعمل مع المدينة لتحديد وإزالة المافيا من خلال النقاش والتصويت.' }
 };
 
+// ==================== AUDIO MANAGER ====================
+const AudioManager = {
+    sounds: {
+        save: new Audio('sound/1.wav'),      // Sound 1: Saved by Doctor
+        innocent: new Audio('sound/2.wav'),  // Sound 2: Innocent voted out
+        mafia: new Audio('sound/3.wav')      // Sound 3: Mafia voted out
+    },
+    play(soundName) {
+        const audio = this.sounds[soundName];
+        if (audio) {
+            audio.currentTime = 0;
+            audio.play().catch(err => console.warn('[AUDIO] Playback failed:', err));
+        }
+    }
+};
+
 // ==================== LOCALSTORAGE ====================
 function savePlayerName(name) {
     localStorage.setItem('mafia_player_name', name);
@@ -733,6 +749,7 @@ function setupSocketEvents() {
             elements.nightResultTitle.textContent = 'معجزة!';
             elements.nightResultText.textContent = 'الطبيب أنقذ شخصاً من هجوم المافيا الليلة الماضية!';
             addEvent('safe', '💉 الطبيب أنقذ أحد اللاعبين من الموت', dayNumber);
+            AudioManager.play('save'); // Sound 1
         } else {
             elements.nightResultTitle.textContent = 'ليلة هادئة';
             elements.nightResultText.textContent = 'استيقظت المدينة لتجد الجميع بخير.';
@@ -781,6 +798,13 @@ function setupSocketEvents() {
             elements.voteResultTitle.textContent = '⚖️ قرار المدينة';
             elements.voteResultText.textContent = `تم إخراج ${eliminated.name} من اللعبة.`;
             addEvent('day', `⚖️ ${eliminated.name} أُخرج بالتصويت`, dayNumber);
+
+            // Trigger sound based on role
+            if (eliminated.role === 'mafia') {
+                AudioManager.play('mafia');    // Sound 3
+            } else {
+                AudioManager.play('innocent'); // Sound 2
+            }
         } else {
             elements.voteResultTitle.textContent = 'لم يتم الاتفاق';
             elements.voteResultText.textContent = 'لم يتمكن اللاعبون من الاتفاق على قرار موحد. لم يتم إخراج أحد.';
