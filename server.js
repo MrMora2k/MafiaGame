@@ -764,6 +764,7 @@ function startNightPhase(room) {
     room.players.forEach(p => p.ready = false);
 
     // Initialize turn state
+    const sortedAlive = getSortedAlivePlayers(room);
     if (sortedAlive.length > 0) {
         room.currentTurnPlayerId = sortedAlive[0].id;
     }
@@ -915,6 +916,7 @@ function startDayPhase(room) {
     room.votes = {};
 
     // Initialize turn state
+    const sortedAlive = getSortedAlivePlayers(room);
     if (sortedAlive.length > 0) {
         room.currentTurnPlayerId = sortedAlive[0].id;
     }
