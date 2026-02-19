@@ -627,11 +627,11 @@ function setupSocketEvents() {
     });
 
     socket.on('phase:night', () => {
-        if (localTimerInterval) clearInterval(localTimerInterval);
+        // Removed clearInterval to prevent race condition with timer:sync
     });
 
     socket.on('phase:day', () => {
-        if (localTimerInterval) clearInterval(localTimerInterval);
+        // Removed clearInterval to prevent race condition with timer:sync
     });
 
     socket.on('game:over', (data) => {

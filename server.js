@@ -763,38 +763,9 @@ function startNightPhase(room) {
     room.nightActions = {};
     room.players.forEach(p => p.ready = false);
 
-    // Initialize turn
-    const sortedAlive = getSortedAlivePlayers(room);
-
-    // Initial timer for the first turn
-    const duration = room.settings.nightTimer;
-    if (duration > 0 && sortedAlive.length > 0) {
-        startRoomTimer(room, duration, () => {
-            const firstPlayer = sortedAlive[0];
-            console.log(`[TIMER] First night turn timed out for ${firstPlayer.name}`);
-            autoCompleteCurrentTurnAction(room, firstPlayer);
-            advanceTurn(room);
-        });
-    }
-
-    // DEBUG: Log all players state
-    console.log(`[DEBUG] startNightPhase Room ${room.code} - Players Dump:`,
-        JSON.stringify(room.players.map(p => ({
-            id: p.id,
-            name: p.name,
-            playerNumber: p.playerNumber,
-            alive: p.alive,
-            role: p.role
-        })), null, 2)
-    );
-
-    console.log(`[DEBUG] Night Play Order Room ${room.code}:`, sortedAlive.map(p => `${p.name}(#${p.playerNumber})`));
-
+    // Initialize turn state
     if (sortedAlive.length > 0) {
         room.currentTurnPlayerId = sortedAlive[0].id;
-        console.log(`[DEBUG] First Turn: ${sortedAlive[0].name} (#${sortedAlive[0].playerNumber}) - ID: ${sortedAlive[0].id}`);
-    } else {
-        console.error('[DEBUG] No alive players found!');
     }
 
     io.to(room.code).emit('phase:night', {
@@ -807,6 +778,19 @@ function startNightPhase(room) {
             name: sortedAlive[0].name
         } : null
     });
+
+    console.log(`[DEBUG] Night Play Order Room ${room.code}:`, sortedAlive.map(p => `${p.name}(#${p.playerNumber})`));
+
+    // Start timer AFTER emitting phase event
+    const duration = room.settings.nightTimer;
+    if (duration > 0 && sortedAlive.length > 0) {
+        startRoomTimer(room, duration, () => {
+            const firstPlayer = sortedAlive[0];
+            console.log(`[TIMER] First night turn timed out for ${firstPlayer.name}`);
+            autoCompleteCurrentTurnAction(room, firstPlayer);
+            advanceTurn(room);
+        });
+    }
 }
 
 // Check if all night actions are complete - DEPRECATED in Turn-based, logic moved to advanceTurn
@@ -930,27 +914,9 @@ function startDayPhase(room) {
     room.phase = PHASES.DAY;
     room.votes = {};
 
-    // Initialize turn
-    const sortedAlive = getSortedAlivePlayers(room);
-
-    // Start Turn Timer for first player
-    const duration = room.settings.dayTimer;
-    if (duration > 0 && sortedAlive.length > 0) {
-        startRoomTimer(room, duration, () => {
-            const firstPlayer = sortedAlive[0];
-            console.log(`[TIMER] First day turn timed out for ${firstPlayer.name}`);
-            autoCompleteCurrentTurnAction(room, firstPlayer);
-            advanceTurn(room);
-        });
-    }
-
-    console.log(`[DEBUG] Day Play Order Room ${room.code}:`, sortedAlive.map(p => `${p.name}(#${p.playerNumber})`));
-
+    // Initialize turn state
     if (sortedAlive.length > 0) {
         room.currentTurnPlayerId = sortedAlive[0].id;
-        console.log(`[DEBUG] Day First Turn: ${sortedAlive[0].name} (#${sortedAlive[0].playerNumber})`);
-    } else {
-        console.error('[DEBUG] No alive players for Day Phase!');
     }
 
     io.to(room.code).emit('phase:day', {
@@ -962,6 +928,19 @@ function startDayPhase(room) {
             name: sortedAlive[0].name
         } : null
     });
+
+    console.log(`[DEBUG] Day Play Order Room ${room.code}:`, sortedAlive.map(p => `${p.name}(#${p.playerNumber})`));
+
+    // Start timer AFTER emitting phase event
+    const duration = room.settings.dayTimer;
+    if (duration > 0 && sortedAlive.length > 0) {
+        startRoomTimer(room, duration, () => {
+            const firstPlayer = sortedAlive[0];
+            console.log(`[TIMER] First day turn timed out for ${firstPlayer.name}`);
+            autoCompleteCurrentTurnAction(room, firstPlayer);
+            advanceTurn(room);
+        });
+    }
 }
 
 // Resolve day voting
