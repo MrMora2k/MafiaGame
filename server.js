@@ -215,15 +215,15 @@ function checkWinCondition(room) {
     return null;
 }
 
-// Get role stats for round summary
+// Get anonymized stats for round summary (hide roles, show names)
 function getRoleStats(room) {
     const alive = room.players.filter(p => p.alive);
     return {
         total: alive.length,
-        mafia: alive.filter(p => p.role === ROLES.MAFIA).length,
-        doctor: alive.filter(p => p.role === ROLES.DOCTOR).length,
-        detective: alive.filter(p => p.role === ROLES.DETECTIVE).length,
-        citizen: alive.filter(p => p.role === ROLES.CITIZEN).length
+        alivePlayers: alive.map(p => ({
+            name: p.name,
+            playerNumber: p.playerNumber
+        })).sort((a, b) => a.playerNumber - b.playerNumber)
     };
 }
 

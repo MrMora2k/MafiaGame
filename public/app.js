@@ -463,13 +463,17 @@ function showPhaseTransition(phase, dayNumber, callback) {
 
 // ==================== ROUND SUMMARY ====================
 function renderRoundSummary(container, roleStats) {
+    const aliveListHtml = roleStats.alivePlayers.map(p => `
+        <div class="alive-player-tag">
+            <span class="player-num">#${p.playerNumber}</span>
+            <span class="player-name">${p.name}</span>
+        </div>
+    `).join('');
+
     container.innerHTML = `
-        <div class="round-summary-title">اللاعبون المتبقون: ${roleStats.total}</div>
-        <div class="round-summary-stats">
-            <div class="stat-badge mafia">🔪 مافيا <span class="stat-count">${roleStats.mafia}</span></div>
-            <div class="stat-badge doctor">💉 طبيب <span class="stat-count">${roleStats.doctor}</span></div>
-            <div class="stat-badge detective">🔍 محقق <span class="stat-count">${roleStats.detective}</span></div>
-            <div class="stat-badge citizen">👤 مواطن <span class="stat-count">${roleStats.citizen}</span></div>
+        <div class="round-summary-title">اللاعبون المتبقون (${roleStats.total})</div>
+        <div class="alive-players-grid">
+            ${aliveListHtml}
         </div>
     `;
 }
