@@ -110,6 +110,9 @@ const elements = {
     readyStatus: document.getElementById('ready-status'),
     readyBtn: document.getElementById('ready-btn'),
     phaseBanner: document.getElementById('phase-banner'),
+    phaseIcon: document.getElementById('phase-icon'),
+    phaseText: document.getElementById('phase-text'),
+    turnIndicator: document.getElementById('turn-indicator'),
     seatsContainer: document.getElementById('seats-container'),
     actionPanel: document.getElementById('action-panel'),
     actionTitle: document.getElementById('action-title'),
@@ -707,9 +710,11 @@ function setupSocketEvents() {
 
         showPhaseTransition('night', dayNumber, () => {
             document.body.classList.remove('theme-day');
-            elements.phaseBanner.innerHTML = `<span class="phase-icon">🌙</span><span class="phase-text">الليلة ${dayNumber}</span>`;
-            if (state.currentTurn) {
-                elements.phaseBanner.innerHTML += ` <span class="turn-indicator">| دور: ${state.currentTurn.name}</span>`;
+
+            if (elements.phaseIcon) elements.phaseIcon.textContent = '🌙';
+            if (elements.phaseText) elements.phaseText.textContent = `الليلة ${dayNumber}`;
+            if (elements.turnIndicator) {
+                elements.turnIndicator.textContent = state.currentTurn ? ` | دور: ${state.currentTurn.name}` : '';
             }
 
             updateActionPanel();
@@ -724,15 +729,8 @@ function setupSocketEvents() {
         state.hasActed = false; // Reset action state for new turn
 
         // Update banner
-        const turnSpan = elements.phaseBanner.querySelector('.turn-indicator');
-        if (playerId && name) {
-            if (turnSpan) {
-                turnSpan.textContent = `| دور: ${name}`;
-            } else {
-                elements.phaseBanner.innerHTML += ` <span class="turn-indicator">| دور: ${name}</span>`;
-            }
-        } else if (turnSpan) {
-            turnSpan.remove(); // Remove indicator if turn is null
+        if (elements.turnIndicator) {
+            elements.turnIndicator.textContent = (playerId && name) ? ` | دور: ${name}` : '';
         }
 
         updateActionPanel();
@@ -797,9 +795,11 @@ function setupSocketEvents() {
 
         showPhaseTransition('day', dayNumber, () => {
             document.body.classList.add('theme-day');
-            elements.phaseBanner.innerHTML = `<span class="phase-icon">☀️</span><span class="phase-text">اليوم ${dayNumber}</span>`;
-            if (state.currentTurn && state.currentTurn.name) {
-                elements.phaseBanner.innerHTML += ` <span class="turn-indicator">| دور: ${state.currentTurn.name}</span>`;
+
+            if (elements.phaseIcon) elements.phaseIcon.textContent = '☀️';
+            if (elements.phaseText) elements.phaseText.textContent = `اليوم ${dayNumber}`;
+            if (elements.turnIndicator) {
+                elements.turnIndicator.textContent = state.currentTurn ? ` | دور: ${state.currentTurn.name}` : '';
             }
 
             updateActionPanel();
@@ -1299,37 +1299,7 @@ safeAddEvent(elements.authPassword, 'keypress', e => { if (e.key === 'Enter') el
 console.log('🎭 Mafia Game Client Loaded Successfully');
 console.log('--- Mafia App Script Execution Completed ---');
 
-function handleProgression(data) {
-    if (!state.user) return;
-
-    // Check for level up before updating state
-    const isLevelUp = data.newLevel > (state.user.level || 1);
-
-    // Update local state
-    state.user.total_xp = data.newXp;
-    state.user.level = data.newLevel;
-    updateProfileUI();
-
-    // Show sequence in Game Over screen
-    if (elements.progressionSummary) {
-        elements.progressionSummary.innerHTML = '';
-        elements.progressionSummary.classList.add('visible');
-
-        // XP Gain
-        const xpEl = document.createElement('div');
-        xpEl.className = 'xp-gain';
-        xpEl.innerHTML = `<span class="icon">✨</span> <span>+${data.xpEarned} XP</span>`;
-        elements.progressionSummary.appendChild(xpEl);
-
-        // Level Up Animation
-        if (isLevelUp) {
-            const lvlEl = document.createElement('div');
-            lvlEl.className = 'level-up-message';
-            lvlEl.innerHTML = `🎉 مستوى جديد: ${data.newLevel}!`;
-            elements.progressionSummary.appendChild(lvlEl);
-        }
-    }
-}
+// Consolidated handleProgression at the end of the file
 
 // Timer logic
 let localTimerInterval = null;
