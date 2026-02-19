@@ -34,7 +34,9 @@ const ROLE_INFO = {
     mafia: { icon: '🔪', image: 'images/Mafia.png', name: 'مافيا', description: 'قم بإزالة سكان المدينة واحداً تلو الآخر. صوّت مع زملائك المافيا لقتل شخص كل ليلة.' },
     doctor: { icon: '💉', image: 'images/doctor.png', name: 'طبيب', description: 'يمكنك إنقاذ شخص واحد كل ليلة من هجوم المافيا. اختر بحكمة!' },
     detective: { icon: '🔍', image: 'images/detective.png', name: 'محقق', description: 'حقق مع لاعب واحد كل ليلة لاكتشاف ما إذا كان مافيا أم لا.' },
-    citizen: { icon: '👤', image: 'images/Citizen.png', name: 'مواطن', description: 'اعمل مع المدينة لتحديد وإزالة المافيا من خلال النقاش والتصويت.' }
+    citizen: { icon: '👤', image: 'images/Citizen.png', name: 'مواطن', description: 'اعمل مع المدينة لتحديد وإزالة المافيا من خلال النقاش والتصويت.' },
+    guardian_angel: { icon: '👼', image: 'images/Angel.png', name: 'الملاك الحارس', description: 'لديك القدرة على إعادة أحد الموتى إلى الحياة! يمكنك استخدام هذه القدرة مرة واحدة فقط كل لعبة.' },
+    joker: { icon: '🃏', image: 'images/Joker.png', name: 'الجوكر', description: 'يمكنك انتحال شخصية أحد الموتى وأخذ دوره! تتاح هذه القدرة بعد موت شخصين أو أكثر، ولمرة واحدة فقط.' }
 };
 
 // ==================== AUDIO MANAGER ====================
@@ -90,9 +92,10 @@ const elements = {
     settingMafia: document.getElementById('setting-mafia'),
     settingDoctors: document.getElementById('setting-doctors'),
     settingDetectives: document.getElementById('setting-detectives'),
+    settingDayTimer: document.getElementById('setting-day-timer'),
+    settingNightTimer: document.getElementById('setting-night-timer'),
+    settingGameMode: document.getElementById('setting-game-mode'),
     settingSelfHeal: document.getElementById('setting-self-heal'),
-    settingPublic: document.getElementById('setting-public'),
-    browseName: document.getElementById('browse-name'),
     roomsList: document.getElementById('rooms-list'),
     refreshRoomsBtn: document.getElementById('refresh-rooms-btn'),
     roleCard: document.getElementById('role-card'),
@@ -740,11 +743,15 @@ function setupSocketEvents() {
         elements.detectiveModal.classList.remove('hidden');
     });
 
-    socket.on('night:result', ({ killed, saved, roleStats, dayNumber }) => {
+    socket.on('night:result', ({ killed, revived, saved, roleStats, dayNumber }) => {
         if (killed) {
             elements.nightResultTitle.textContent = 'مأساة عند الفجر';
             elements.nightResultText.textContent = `${killed.name} وُجد ميتاً هذا الصباح. المافيا ضربت.`;
             addEvent('death', `💀 ${killed.name} قُتل على يد المافيا`, dayNumber);
+        } else if (revived) {
+            elements.nightResultTitle.textContent = 'عودة من الموت! ✨';
+            elements.nightResultText.textContent = `الملاك الحارس تدخل! ${revived.name} عاد إلى الحياة.`;
+            addEvent('safe', `👼 الملاك الحارس أعاد ${revived.name} للحياة`, dayNumber);
         } else if (saved) {
             elements.nightResultTitle.textContent = 'معجزة!';
             elements.nightResultText.textContent = 'الطبيب أنقذ شخصاً من هجوم المافيا الليلة الماضية!';
@@ -833,6 +840,19 @@ function setupSocketEvents() {
             </li>
         `).join('');
         showScreen('gameover');
+    });
+
+    socket.on('joker:roleUpdate', ({ newRole, revivedPlayer }) => {
+        if (newRole) {
+            state.role = newRole;
+            // Update role card icon
+            const icon = ROLE_INFO[newRole].icon;
+            document.querySelector('.role-icon').textContent = icon;
+            document.querySelector('.role-name').textContent = ROLE_INFO[newRole].name;
+            document.querySelector('.role-description').textContent = ROLE_INFO[newRole].description;
+
+            showError(`🃏 لقد تقمصت دور: ${ROLE_INFO[newRole].name}!`);
+        }
     });
 }
 
@@ -926,6 +946,7 @@ function setupSettingsHandlers() {
     elements.settingPublic.addEventListener('change', updateSettings);
     elements.settingNightTimer.addEventListener('change', updateSettings);
     elements.settingDayTimer.addEventListener('change', updateSettings);
+    elements.settingGameMode.addEventListener('change', updateSettings);
 }
 
 function updateSettings() {
@@ -938,7 +959,8 @@ function updateSettings() {
         doctorSelfHeal: elements.settingSelfHeal.checked,
         isPublic: elements.settingPublic.checked,
         nightTimer: parseInt(elements.settingNightTimer.value),
-        dayTimer: parseInt(elements.settingDayTimer.value)
+        dayTimer: parseInt(elements.settingDayTimer.value),
+        gameMode: elements.settingGameMode.value
     };
     socket.emit('room:updateSettings', settings);
 }
@@ -954,6 +976,7 @@ function applySettings(settings) {
     elements.settingPublic.checked = settings.isPublic || false;
     elements.settingNightTimer.value = settings.nightTimer || 60;
     elements.settingDayTimer.value = settings.dayTimer || 120;
+    elements.settingGameMode.value = settings.gameMode || 'classic';
 }
 
 setupSettingsHandlers();
@@ -1024,18 +1047,20 @@ function updateActionPanel() {
         if (role === 'mafia') {
             elements.actionTitle.textContent = '🔪 دورك: اختر ضحيتك';
             elements.actionHint.textContent = 'اختر لاعباً لإزالته';
-        } else if (role === 'doctor') {
-            const selfHealText = state.settings.doctorSelfHeal ? ' (يمكنك حماية نفسك)' : '';
-            elements.actionTitle.textContent = '💉 دورك: أنقذ شخصاً';
-            elements.actionHint.textContent = 'اختر لاعباً لحمايته' + selfHealText;
-            // Doctor can skip/sleep if they want to do nothing
+        } else if (role === 'guardian_angel') {
+            elements.actionTitle.textContent = '👼 الملاك الحارس: أعد الحياة';
+            elements.actionHint.textContent = 'اختر لاعباً ميتاً (ليس مقتولاً بالتصويت) لإعادته.';
             elements.skipActionBtn.style.display = 'inline-block';
-            elements.skipActionBtn.textContent = 'تخطي (لا تفعل شيئاً)';
-        } else if (role === 'detective') {
-            elements.actionTitle.textContent = '🔍 دورك: حقق';
-            elements.actionHint.textContent = 'اختر لاعباً لكشفه';
-            // Detective can skip? Usually no, but let's allow "End Turn" without action if they really want? 
-            // Better to force action or show Skip. Let's show Skip.
+            elements.skipActionBtn.textContent = 'تخطي';
+        } else if (role === 'joker') {
+            const deadCount = state.players.filter(p => !p.alive).length;
+            if (deadCount >= 2) {
+                elements.actionTitle.textContent = '🃏 الجوكر: اختر دوراً';
+                elements.actionHint.textContent = 'اختر لاعباً ميتاً لتأخذ دوره (لا تعرف الدور مسبقاً).';
+            } else {
+                elements.actionTitle.textContent = '🃏 الجوكر: انتظر';
+                elements.actionHint.textContent = 'يجب أن يموت شخصان على الأقل لتفعيل قدرتك.';
+            }
             elements.skipActionBtn.style.display = 'inline-block';
             elements.skipActionBtn.textContent = 'تخطي';
         } else {
@@ -1095,8 +1120,17 @@ function renderSeats() {
 function handleSeatClick(seat) {
     const targetId = seat.dataset.playerId;
     const targetPlayer = state.players.find(p => p.id === targetId);
+    if (!targetPlayer) return;
 
-    if (!targetPlayer || !targetPlayer.alive) return;
+    // Guardian Angel & Joker can target dead players
+    const isSpecialRole = state.role === 'guardian_angel' || state.role === 'joker';
+
+    if (!targetPlayer.alive && !isSpecialRole) return;
+    if (targetPlayer.alive && isSpecialRole && state.phase === 'night') {
+        // Special roles MUST target dead players at night
+        return showError('يجب اختيار لاعب ميت لتفعيل هذه القدرة');
+    }
+
     if (state.hasActed) return;
 
     const myPlayer = state.players.find(p => p.id === state.playerId);
@@ -1132,8 +1166,10 @@ function handleSeatClick(seat) {
             elements.actionTitle.textContent = `🔪 اخترت: ${targetPlayer.name}`;
         } else if (state.role === 'doctor') {
             elements.actionTitle.textContent = `💉 تحمي: ${targetPlayer.name}`;
-        } else if (state.role === 'detective') {
-            elements.actionTitle.textContent = `🔍 تحقق من: ${targetPlayer.name}`;
+        } else if (state.role === 'guardian_angel') {
+            elements.actionTitle.textContent = `👼 دعوت: ${targetPlayer.name}`;
+        } else if (state.role === 'joker') {
+            elements.actionTitle.textContent = `🃏 اخترت تقمص: ${targetPlayer.name}`;
         }
         elements.actionHint.textContent = 'في انتظار اللاعبين الآخرين...';
     } else if (state.phase === 'day') {

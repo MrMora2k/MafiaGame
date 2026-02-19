@@ -110,7 +110,9 @@ const ROLES = {
     MAFIA: 'mafia',
     DOCTOR: 'doctor',
     DETECTIVE: 'detective',
-    CITIZEN: 'citizen'
+    CITIZEN: 'citizen',
+    GUARDIAN_ANGEL: 'guardian_angel', // New: Revives killed players
+    JOKER: 'joker'                     // New: Mimics dead roles
 };
 
 // Game phases
@@ -131,7 +133,8 @@ const DEFAULT_SETTINGS = {
     doctorSelfHeal: true,
     isPublic: false,
     nightTimer: 60,
-    dayTimer: 120
+    dayTimer: 120,
+    gameMode: 'classic' // classic or custom
 };
 
 // Generate a random 6-character room code
@@ -166,14 +169,29 @@ function assignRoles(players, settings) {
         roles.push(ROLES.MAFIA);
     }
 
-    // Add Doctors
-    for (let i = 0; i < settings.doctorCount; i++) {
-        if (roles.length < totalPlayers) roles.push(ROLES.DOCTOR);
-    }
+    if (settings.gameMode === 'custom') {
+        // Custom Mode Specifics
+        roles.push(ROLES.GUARDIAN_ANGEL);
+        roles.push(ROLES.JOKER);
 
-    // Add Detectives
-    for (let i = 0; i < settings.detectiveCount; i++) {
-        if (roles.length < totalPlayers) roles.push(ROLES.DETECTIVE);
+        // Fill remaining special slots minus what's taken by GA/Joker
+        for (let i = 0; i < settings.doctorCount; i++) {
+            if (roles.length < totalPlayers) roles.push(ROLES.DOCTOR);
+        }
+        for (let i = 0; i < settings.detectiveCount; i++) {
+            if (roles.length < totalPlayers) roles.push(ROLES.DETECTIVE);
+        }
+    } else {
+        // Classic Mode
+        // Add Doctors
+        for (let i = 0; i < settings.doctorCount; i++) {
+            if (roles.length < totalPlayers) roles.push(ROLES.DOCTOR);
+        }
+
+        // Add Detectives
+        for (let i = 0; i < settings.detectiveCount; i++) {
+            if (roles.length < totalPlayers) roles.push(ROLES.DETECTIVE);
+        }
     }
 
     // Fill rest with Citizens
@@ -185,6 +203,8 @@ function assignRoles(players, settings) {
     const shuffledRoles = shuffleArray(roles);
     players.forEach((player, index) => {
         player.role = shuffledRoles[index];
+        player.originalRole = shuffledRoles[index]; // Keep record for Joker
+        player.usedSpecialAction = false; // For roles with one-time use powers
     });
 
     return players;
@@ -467,6 +487,32 @@ io.on('connection', (socket) => {
         const player = room.players.find(p => p.id === socket.id);
         if (!player || !player.alive) return;
 
+        // Guardian Angel / Joker Target Check
+        const target = room.players.find(p => p.id === targetId);
+        if ((player.role === ROLES.GUARDIAN_ANGEL || player.role === ROLES.JOKER)) {
+            if (player.usedSpecialAction) {
+                socket.emit('room:error', 'لقد استخدمت قدرتك الخاصة بالفعل!');
+                return;
+            }
+            if (!target || target.alive) {
+                socket.emit('room:error', 'يجب اختيار لاعب ميت!');
+                return;
+            }
+
+            if (player.role === ROLES.GUARDIAN_ANGEL && target.lynched) {
+                socket.emit('room:error', 'يمكنك فقط إحياء من قُتلوا غدراً، وليس من أُخرجوا بالتصويت!');
+                return;
+            }
+
+            if (player.role === ROLES.JOKER) {
+                const deadCount = room.players.filter(p => !p.alive).length;
+                if (deadCount < 2) {
+                    socket.emit('room:error', 'يجب أن يموت شخصان على الأقل لتفعيل قدرتك!');
+                    return;
+                }
+            }
+        }
+
         // Doctor self-heal check
         if (player.role === ROLES.DOCTOR && targetId === socket.id && !room.settings.doctorSelfHeal) {
             socket.emit('room:error', 'You cannot heal yourself');
@@ -474,8 +520,7 @@ io.on('connection', (socket) => {
         }
 
         room.nightActions[player.role] = room.nightActions[player.role] || [];
-
-        // Remove previous action from same player (though in turn-based, they act once)
+        // Sequential turn means only one action per turn
         room.nightActions[player.role] = room.nightActions[player.role].filter(a => a.actor !== socket.id);
 
         room.nightActions[player.role].push({
@@ -831,9 +876,42 @@ function resolveNight(room) {
         killedPlayer.alive = false;
     }
 
+    // Guardian Angel Revival
+    let revivedPlayer = null;
+    if (room.nightActions[ROLES.GUARDIAN_ANGEL]) {
+        const action = room.nightActions[ROLES.GUARDIAN_ANGEL][0];
+        const target = room.players.find(p => p.id === action.target);
+
+        // Only revive if they weren't voted out (we should track how they died)
+        // For now, let's assume all dead players in nightActions for GA are valid targets
+        // but we should check if they were already dead before this night or killed this night.
+        // The user said "not those اخرجوا بالتصويت".
+        if (target && !target.alive && !target.lynched) {
+            target.alive = true;
+            revivedPlayer = target;
+            const gaPlayer = room.players.find(p => p.id === action.actor);
+            if (gaPlayer) gaPlayer.usedSpecialAction = true;
+        }
+    }
+
+    // Joker Mimicry (processed at end of night for simplicity, or immediate? Let's do end of night)
+    if (room.nightActions[ROLES.JOKER]) {
+        const action = room.nightActions[ROLES.JOKER][0];
+        const jokerPlayer = room.players.find(p => p.id === action.actor);
+        const target = room.players.find(p => p.id === action.target);
+
+        if (jokerPlayer && target && !target.alive) {
+            jokerPlayer.role = target.originalRole;
+            jokerPlayer.usedSpecialAction = true;
+            // Notify the joker privately
+            io.to(jokerPlayer.id).emit('joker:roleUpdate', { newRole: jokerPlayer.role });
+        }
+    }
+
     // Send night results with role stats
     io.to(room.code).emit('night:result', {
         killed: killedPlayer ? { id: killedPlayer.id, name: killedPlayer.name } : null,
+        revived: revivedPlayer ? { id: revivedPlayer.id, name: revivedPlayer.name } : null,
         saved: savedPlayer ? true : false,
         roleStats: getRoleStats(room),
         dayNumber: room.dayNumber
@@ -918,6 +996,7 @@ function resolveDayVoting(room) {
         eliminatedPlayer = room.players.find(p => p.id === topVote[0]);
         if (eliminatedPlayer) {
             eliminatedPlayer.alive = false;
+            eliminatedPlayer.lynched = true; // Mark as lynched for Guardian Angel check
         }
     }
 
