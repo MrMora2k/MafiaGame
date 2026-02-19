@@ -8,7 +8,16 @@ const DB = require('./database');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    cors: {
+        origin: "*", // Allow all origins (App, Web, etc.)
+        methods: ["GET", "POST"]
+    },
+    pingTimeout: 60000, // 60 seconds before disconnect (helps with screen off/background)
+    pingInterval: 25000
+});
+
+app.use(require('cors')()); // Enable CORS for Express
 
 const SECRET_KEY = 'mafia_ultra_secret_key_2026'; // In production, move to env
 
@@ -238,12 +247,18 @@ function checkWinCondition(room) {
 // Get anonymized stats for round summary (hide roles, show names)
 function getRoleStats(room) {
     const alive = room.players.filter(p => p.alive);
+    const roleCounts = {};
+    alive.forEach(p => {
+        roleCounts[p.role] = (roleCounts[p.role] || 0) + 1;
+    });
+
     return {
         total: alive.length,
         alivePlayers: alive.map(p => ({
             name: p.name,
             playerNumber: p.playerNumber
-        })).sort((a, b) => a.playerNumber - b.playerNumber)
+        })).sort((a, b) => a.playerNumber - b.playerNumber),
+        roleCounts: roleCounts
     };
 }
 
@@ -528,6 +543,18 @@ io.on('connection', (socket) => {
             target: targetId
         });
 
+        // Broadcast to other mafia
+        if (player.role === ROLES.MAFIA) {
+            const mafiaTeammates = room.players.filter(p => p.role === ROLES.MAFIA && p.id !== socket.id);
+            const targetName = room.players.find(p => p.id === targetId)?.name || 'Unknown';
+            mafiaTeammates.forEach(tm => {
+                io.to(tm.id).emit('mafia:teammateVote', {
+                    actorName: player.name,
+                    targetName: targetName
+                });
+            });
+        }
+
         socket.emit('night:actionConfirmed', { targetId });
 
         // Advance turn
@@ -807,17 +834,24 @@ function resolveNight(room) {
     const investigationResults = [];
 
     // Get mafia kill target (majority vote among mafia)
+    // Get mafia kill target (Strict Agreement Logic)
     if (room.nightActions[ROLES.MAFIA]) {
-        const killVotes = {};
-        room.nightActions[ROLES.MAFIA].forEach(action => {
-            killVotes[action.target] = (killVotes[action.target] || 0) + 1;
-        });
+        const actions = room.nightActions[ROLES.MAFIA];
+        if (actions.length > 0) {
+            // Check if all mafia voted for the SAME target
+            const firstTarget = actions[0].target;
+            const allAgree = actions.every(a => a.target === firstTarget);
 
-        // In turn-based, Mafia technically vote sequentially.
-        // We still take the majority or the last one? Majority is fair.
-        const targetId = Object.entries(killVotes).sort((a, b) => b[1] - a[1])[0]?.[0];
-        if (targetId) {
-            killedPlayer = room.players.find(p => p.id === targetId);
+            // Also ensure we have a majority of the *living* mafia?
+            // User request: "If not agreed (e.g. 2 vs 1), no kill & show message"
+            // We will implement: ALL acting mafia must target the same person.
+
+            if (allAgree) {
+                killedPlayer = room.players.find(p => p.id === firstTarget);
+            } else {
+                console.log(`[GAME] Mafia disagreement in room ${room.code}. No kill.`);
+                io.to(room.code).emit('mafia:disagreement'); // Client can show a toast if needed
+            }
         }
     }
 

@@ -1699,13 +1699,7 @@ select {
     color: white;
 }
 
-.player-seat.teammate::after {
-    content: '🔪';
-    position: absolute;
-    top: -5px;
-    left: -5px;
-    font-size: 0.9rem;
-}
+/* Knife icon removed by user request */
 
 /* Seat name label */
 .seat-name {
@@ -2552,19 +2546,22 @@ select {
 /* ==================== EVENT LOG ==================== */
 .event-log-toggle {
     position: fixed;
-    bottom: 16px;
-    left: 16px;
-    padding: 10px 16px;
+    top: 20px;
+    right: 20px;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
     background: var(--glass-bg);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--glass-border);
-    border-radius: 30px;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     cursor: pointer;
     z-index: 90;
-    transition: all 0.3s ease;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+    transition: all var(--transition-fast);
 }
 
 .event-log-toggle:hover {

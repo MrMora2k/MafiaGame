@@ -12,6 +12,15 @@ console.log('--- Mafia App Script Execution Started --- VERSION 2.0 ---');
 
 // ==================== SOCKET & STATE ====================
 let socket;
+const PROD_URL = 'https://mafiagame-29vw.onrender.com';
+
+function getApiBaseUrl() {
+    // Check if running in Capacitor or non-browser env (simplified check)
+    const isApp = window.location.protocol === 'file:' || window.Capacitor;
+    return isApp ? PROD_URL : '';
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 const state = {
     roomCode: null,
@@ -50,10 +59,25 @@ const AudioManager = {
         mafia: new Audio('sound/3.wav')      // Sound 3: Mafia voted out
     },
     play(soundName) {
-        const audio = this.sounds[soundName];
-        if (audio) {
-            audio.currentTime = 0;
-            audio.play().catch(err => console.warn('[AUDIO] Playback failed:', err));
+        // Stop any currently playing instance first (optional, but good for cleanup)
+        this.stop(soundName);
+
+        const sound = this.sounds[soundName];
+        if (sound) {
+            sound.currentTime = 0;
+            sound.play().catch(err => console.warn('[AUDIO] Playback failed:', err));
+
+            // Limit specific sounds to 3 seconds
+            setTimeout(() => {
+                this.stop(soundName);
+            }, 3000);
+        }
+    },
+    stop(soundName) {
+        const sound = this.sounds[soundName];
+        if (sound) {
+            sound.pause();
+            sound.currentTime = 0;
         }
     }
 };
@@ -257,7 +281,7 @@ async function handleAuthSubmit(e) {
         const endpoint = state.authMode === 'login' ? '/api/login' : '/api/register';
         console.log(`[AUTH] Sending request to ${endpoint}...`);
 
-        const res = await fetch(endpoint, {
+        const res = await fetch(`${API_BASE_URL}${endpoint}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
@@ -308,7 +332,7 @@ async function checkAuth(source = 'unknown') {
             return;
         }
 
-        const res = await fetch('/api/me', {
+        const res = await fetch(`${API_BASE_URL}/api/me`, {
             headers: { 'Authorization': `Bearer ${state.token}` }
         });
 
@@ -337,7 +361,10 @@ async function checkAuth(source = 'unknown') {
 }
 
 function connectSocket() {
-    socket = io({
+    // If API_BASE_URL is empty, io() auto-detects. If set, we pass it.
+    // For production app, it MUST be the full URL.
+    const socketUrl = API_BASE_URL || undefined;
+    socket = io(socketUrl, {
         auth: { token: state.token }
     });
     setupSocketEvents();
@@ -381,7 +408,7 @@ function updateProfileUI() {
 
     if (!state.user) {
         if (state.token) {
-            fetch('/api/me', {
+            fetch(`${API_BASE_URL}/api/me`, {
                 headers: { 'Authorization': `Bearer ${state.token}` }
             }).then(r => r.json()).then(data => {
                 if (data.success && data.user) {
@@ -490,6 +517,16 @@ function showPhaseTransition(phase, dayNumber, callback) {
 
 // ==================== ROUND SUMMARY ====================
 function renderRoundSummary(container, roleStats) {
+    // Role counts
+    let roleCountsHtml = '';
+    if (roleStats.roleCounts) {
+        roleCountsHtml = '<div class="round-summary-stats">';
+        if (roleStats.roleCounts['mafia']) roleCountsHtml += `<div class="stat-badge mafia"><span class="stat-count">${roleStats.roleCounts['mafia']}</span> مافيا</div>`;
+        if (roleStats.roleCounts['doctor']) roleCountsHtml += `<div class="stat-badge doctor"><span class="stat-count">${roleStats.roleCounts['doctor']}</span> طبيب</div>`;
+        if (roleStats.roleCounts['detective']) roleCountsHtml += `<div class="stat-badge detective"><span class="stat-count">${roleStats.roleCounts['detective']}</span> محقق</div>`;
+        roleCountsHtml += '</div>';
+    }
+
     const aliveListHtml = roleStats.alivePlayers.map(p => `
         <div class="alive-player-tag">
             <span class="player-num">#${p.playerNumber}</span>
@@ -498,7 +535,9 @@ function renderRoundSummary(container, roleStats) {
     `).join('');
 
     container.innerHTML = `
-        <div class="round-summary-title">اللاعبون المتبقون (${roleStats.total})</div>
+        <div class="round-summary-title">إحصائيات الجولة</div>
+        ${roleCountsHtml}
+        <div class="round-summary-title" style="margin-top: 15px;">اللاعبون المتبقون (${roleStats.total})</div>
         <div class="alive-players-grid">
             ${aliveListHtml}
         </div>
@@ -634,6 +673,10 @@ function setupSocketEvents() {
         // Removed clearInterval to prevent race condition with timer:sync
     });
 
+    socket.on('mafia:teammateVote', ({ actorName, targetName }) => {
+        showToast(`زميلك ${actorName} صوت لقتل ${targetName}`, 'warning');
+    });
+
     socket.on('game:over', (data) => {
         if (localTimerInterval) clearInterval(localTimerInterval);
         elements.phaseTimer.classList.add('hidden');
@@ -667,7 +710,11 @@ function setupSocketEvents() {
         // If mafia with teammates, show them in description
         if (role === 'mafia' && teammates && teammates.length > 0) {
             const teammateNames = teammates.map(t => `${t.name} (#${t.playerNumber})`).join('، ');
-            elements.roleDescription.innerHTML = `${info.description}<br><br><strong>🔪 زملاؤك المافيا:</strong> ${teammateNames}`;
+            elements.roleDescription.innerHTML = `${info.description}
+            <div style="margin-top: 15px; padding: 10px; background: rgba(220, 38, 38, 0.2); border: 1px solid rgba(220, 38, 38, 0.4); border-radius: 8px;">
+                <strong style="color: #fca5a5; display: block; margin-bottom: 5px;">👥 زملاؤك المافيا:</strong>
+                <span style="color: white; font-weight: bold;">${teammateNames}</span>
+            </div>`;
         } else {
             elements.roleDescription.textContent = info.description;
         }
@@ -819,8 +866,9 @@ function setupSocketEvents() {
 
         if (eliminated) {
             elements.voteResultTitle.textContent = '⚖️ قرار المدينة';
-            elements.voteResultText.textContent = `تم إخراج ${eliminated.name} من اللعبة.`;
-            addEvent('day', `⚖️ ${eliminated.name} أُخرج بالتصويت`, dayNumber);
+            const roleText = eliminated.role === 'mafia' ? 'كان من المافيا! 😈' : 'لم يكن من المافيا. 👤';
+            elements.voteResultText.innerHTML = `تم إخراج <span class="highlight">${eliminated.name}</span>.<br><span style="font-size: 0.9em; color: var(--text-secondary); margin-top: 8px; display: block;">${roleText}</span>`;
+            addEvent('day', `⚖️ ${eliminated.name} أُخرج بالتصويت (${roleText})`, dayNumber);
 
             // Trigger sound based on role
             if (eliminated.role === 'mafia') {
@@ -893,7 +941,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 // Fetch and display public rooms
 async function fetchPublicRooms() {
     try {
-        const response = await fetch('/api/rooms');
+        const response = await fetch(`${API_BASE_URL}/api/rooms`);
         const rooms = await response.json();
 
         if (rooms.length === 0) {
