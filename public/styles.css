@@ -2290,6 +2290,16 @@ select {
         height: 48px;
         font-size: 1.2rem;
     }
+
+    .phase-banner {
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+    }
+
+    .phase-timer {
+        margin-right: 0;
+    }
 }
 
 @media (max-width: 360px) {

@@ -539,20 +539,10 @@ io.on('connection', (socket) => {
         const room = rooms.get(socket.roomCode);
         if (!room || room.phase !== PHASES.NIGHT) return;
 
-        // Turn check
-        if (room.currentTurnPlayerId !== socket.id) {
-            socket.emit('room:error', 'Not your turn!');
-            return;
-        }
-
         const player = room.players.find(p => p.id === socket.id);
         if (!player || !player.alive) return;
 
-        // Any role acts or skips. Citizens usually skip.
-        // We just verify turn. Role logic is up to client UI mostly, 
-        // but we can enforce if needed. For now, allow skip.
-
-        // Mark as acted/skipped
+        // Skip logic
         room.nightActions['skips'] = room.nightActions['skips'] || [];
         room.nightActions['skips'].push(socket.id);
 

@@ -21,9 +21,12 @@ const state = {
     phase: 'lobby',
     players: [],
     dayNumber: 0,
+    isHost: false,
     hasActed: false,
+    usedSpecialAction: false, // New: track one-time uses
     selectedTarget: null,
     settings: {},
+    teammates: [],
     token: localStorage.getItem('mafia_token') || null,
     user: null,
     authMode: 'login', // 'login' or 'register'
@@ -96,12 +99,14 @@ const elements = {
     settingNightTimer: document.getElementById('setting-night-timer'),
     settingGameMode: document.getElementById('setting-game-mode'),
     settingSelfHeal: document.getElementById('setting-self-heal'),
+    settingPublic: document.getElementById('setting-public'),
     roomsList: document.getElementById('rooms-list'),
     refreshRoomsBtn: document.getElementById('refresh-rooms-btn'),
     roleCard: document.getElementById('role-card'),
     roleIcon: document.getElementById('role-icon'),
     roleName: document.getElementById('role-name'),
     roleDescription: document.getElementById('role-description'),
+    roleImage: document.getElementById('role-image'),
     readyStatus: document.getElementById('ready-status'),
     readyBtn: document.getElementById('ready-btn'),
     phaseBanner: document.getElementById('phase-banner'),
@@ -163,7 +168,7 @@ const elements = {
     xpBarFill: document.getElementById('xp-bar-fill'),
     statsGames: document.getElementById('stats-games'),
     statsWins: document.getElementById('stats-wins'),
-    statsRatio: document.getElementById('stats-ratio'),
+    statsRatio: document.getElementById('stats-wins-ratio'),
     closeProfileBtn: document.getElementById('close-profile-btn'),
     logoutBtn: document.getElementById('logout-btn'),
     headerLogoutBtn: document.getElementById('header-logout-btn')
@@ -348,7 +353,7 @@ function updateProfileUI() {
     const elXpBarFill = document.getElementById('xp-bar-fill');
     const elStatsGames = document.getElementById('stats-games');
     const elStatsWins = document.getElementById('stats-wins');
-    const elStatsRatio = document.getElementById('stats-ratio');
+    const elStatsRatio = document.getElementById('stats-wins-ratio');
 
     console.log('[PROFILE] DOM elements found:', {
         headerUsername: !!elHeaderUsername,
@@ -639,12 +644,19 @@ function setupSocketEvents() {
 
     socket.on('settings:updated', (settings) => {
         applySettings(settings);
+        // Show game mode in waiting screen
+        const modeText = settings.gameMode === 'custom' ? 'نمط مخصص 🃏' : 'نمط كلاسيكي 🎭';
+        elements.maxPlayers.parentElement.innerHTML = `اللاعبون (<span id="player-count">${state.players.length}</span>/<span id="max-players">${settings.maxPlayers}</span>) | ${modeText}`;
+        // Re-cache maxPlayers ref since we just overwrote its parent's HTML
+        elements.maxPlayers = document.getElementById('max-players');
+        elements.playerCount = document.getElementById('player-count');
     });
 
     // ==================== SOCKET EVENTS - ROLE REVEAL ====================
     socket.on('role:assigned', ({ role, teammates }) => {
         state.role = role;
         state.teammates = teammates || [];
+        state.usedSpecialAction = false; // Reset for new game
         const info = ROLE_INFO[role];
         elements.roleIcon.innerHTML = `<img src="${info.image}" alt="${info.name}" style="width: 80px; height: 80px; object-fit: contain;">`;
         elements.roleName.textContent = info.name;
@@ -729,6 +741,10 @@ function setupSocketEvents() {
 
     socket.on('night:actionConfirmed', () => {
         // Action confirmed by server
+        if (state.role === 'guardian_angel' || state.role === 'joker') {
+            state.usedSpecialAction = true;
+            updateActionPanel();
+        }
     });
 
     socket.on('detective:result', ({ targetName, isMafia }) => {
@@ -1048,18 +1064,28 @@ function updateActionPanel() {
             elements.actionTitle.textContent = '🔪 دورك: اختر ضحيتك';
             elements.actionHint.textContent = 'اختر لاعباً لإزالته';
         } else if (role === 'guardian_angel') {
-            elements.actionTitle.textContent = '👼 الملاك الحارس: أعد الحياة';
-            elements.actionHint.textContent = 'اختر لاعباً ميتاً (ليس مقتولاً بالتصويت) لإعادته.';
+            if (state.usedSpecialAction) {
+                elements.actionTitle.textContent = '👼 الملاك الحارس: قدرة مستخدمة';
+                elements.actionHint.textContent = 'لقد استخدمت قدرة الإحياء بالفعل.';
+            } else {
+                elements.actionTitle.textContent = '👼 الملاك الحارس: أعد الحياة';
+                elements.actionHint.textContent = 'اختر لاعباً ميتاً (ليس مقتولاً بالتصويت) لإعادته.';
+            }
             elements.skipActionBtn.style.display = 'inline-block';
             elements.skipActionBtn.textContent = 'تخطي';
         } else if (role === 'joker') {
-            const deadCount = state.players.filter(p => !p.alive).length;
-            if (deadCount >= 2) {
-                elements.actionTitle.textContent = '🃏 الجوكر: اختر دوراً';
-                elements.actionHint.textContent = 'اختر لاعباً ميتاً لتأخذ دوره (لا تعرف الدور مسبقاً).';
+            if (state.usedSpecialAction) {
+                elements.actionTitle.textContent = '🃏 الجوكر: تم استهلاك الدور';
+                elements.actionHint.textContent = 'لقد قمت بالفعل بتمثيل دور ميت.';
             } else {
-                elements.actionTitle.textContent = '🃏 الجوكر: انتظر';
-                elements.actionHint.textContent = 'يجب أن يموت شخصان على الأقل لتفعيل قدرتك.';
+                const deadCount = state.players.filter(p => !p.alive).length;
+                if (deadCount >= 2) {
+                    elements.actionTitle.textContent = '🃏 الجوكر: اختر دوراً';
+                    elements.actionHint.textContent = 'اختر لاعباً ميتاً لتأخذ دوره (لا تعرف الدور مسبقاً).';
+                } else {
+                    elements.actionTitle.textContent = '🃏 الجوكر: انتظر';
+                    elements.actionHint.textContent = 'يجب أن يموت شخصان على الأقل لتفعيل قدرتك.';
+                }
             }
             elements.skipActionBtn.style.display = 'inline-block';
             elements.skipActionBtn.textContent = 'تخطي';
