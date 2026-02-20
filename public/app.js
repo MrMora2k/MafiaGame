@@ -686,6 +686,7 @@ function setupSocketEvents() {
             const txt = seat.querySelector('.mafia-target-text');
             if (txt) txt.remove();
         });
+        state.mafiaVotesText = null;
         const targetBanner = document.getElementById('mafia-target-banner');
         if (targetBanner) targetBanner.style.display = 'none';
     });
@@ -697,6 +698,7 @@ function setupSocketEvents() {
             const txt = seat.querySelector('.mafia-target-text');
             if (txt) txt.remove();
         });
+        state.mafiaVotesText = null;
         const targetBanner = document.getElementById('mafia-target-banner');
         if (targetBanner) targetBanner.style.display = 'none';
     });
@@ -714,6 +716,7 @@ function setupSocketEvents() {
         // Top Banner explicit targeting
         const targetBanner = document.getElementById('mafia-target-banner');
         if (targetBanner) {
+            let bannerText = null;
             if (targets && Array.isArray(targets) && targets.length > 0) {
                 // Determine names of targeted players
                 const targetedNames = targets.map(tid => {
@@ -723,7 +726,15 @@ function setupSocketEvents() {
 
                 // Show the names
                 const uniqueNames = [...new Set(targetedNames)];
-                targetBanner.textContent = `🔪 المافيا الباقين اختاروا: ${uniqueNames.join(' و ')}`;
+                bannerText = `🔪 المافيا الباقين اختاروا: ${uniqueNames.join(' و ')}`;
+            } else if (targetName) {
+                // Fallback for old server payloads which only sent the single targetName
+                bannerText = `🔪 المافيا الباقين اختاروا: ${targetName}`;
+            }
+
+            if (bannerText) {
+                state.mafiaVotesText = bannerText;
+                targetBanner.textContent = bannerText;
                 targetBanner.style.display = 'block';
             } else {
                 targetBanner.style.display = 'none';
@@ -836,6 +847,13 @@ function setupSocketEvents() {
 
         updateActionPanel();
         renderSeats();
+
+        // Ensure Mafia target banner persists across turn changes
+        const targetBanner = document.getElementById('mafia-target-banner');
+        if (targetBanner && state.mafiaVotesText) {
+            targetBanner.textContent = state.mafiaVotesText;
+            targetBanner.style.display = 'block';
+        }
     });
 
     socket.on('night:actionConfirmed', () => {
