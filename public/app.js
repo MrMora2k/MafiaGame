@@ -15,15 +15,9 @@ let socket = null;
 const PROD_URL = 'https://mafiagame-29vw.onrender.com';
 
 function getApiBaseUrl() {
-    // Detailed detection for APK/Capacitor environment
-    const isCapacitor = !!window.Capacitor;
-    const isLocalFile = window.location.protocol === 'file:';
-    const isAndroidApp = window.location.hostname === 'localhost' && !window.location.port; // Capacitor Android default
-
-    const isApp = isCapacitor || isLocalFile || isAndroidApp;
-
-    console.log('[ENV] App detection:', { isCapacitor, isLocalFile, isAndroidApp, isApp });
-    return isApp ? PROD_URL : '';
+    // FORCE PRODUCTION URL FOR APK BUILD
+    // (Bypasses all detection logic to ensure connection works)
+    return PROD_URL;
 }
 
 const API_BASE_URL = getApiBaseUrl();
