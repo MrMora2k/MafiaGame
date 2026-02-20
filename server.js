@@ -547,10 +547,15 @@ io.on('connection', (socket) => {
         if (player.role === ROLES.MAFIA) {
             const mafiaTeammates = room.players.filter(p => p.role === ROLES.MAFIA && p.id !== socket.id);
             const targetName = room.players.find(p => p.id === targetId)?.name || 'Unknown';
+
+            // Get all current active mafia targets
+            const currentMafiaTargets = room.nightActions[ROLES.MAFIA].map(a => a.target);
+
             mafiaTeammates.forEach(tm => {
                 io.to(tm.id).emit('mafia:teammateVote', {
                     actorName: player.name,
-                    targetName: targetName
+                    targetName: targetName,
+                    targets: currentMafiaTargets // Send array of target IDs
                 });
             });
         }

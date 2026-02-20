@@ -680,15 +680,37 @@ function setupSocketEvents() {
     });
 
     socket.on('phase:night', () => {
-        // Removed clearInterval to prevent race condition with timer:sync
+        // Clear any leftover targeted UI tags from previous nights
+        document.querySelectorAll('.player-seat.mafia-targeted').forEach(seat => {
+            seat.classList.remove('mafia-targeted');
+        });
     });
 
     socket.on('phase:day', () => {
-        // Removed clearInterval to prevent race condition with timer:sync
+        // Clear target UI when day starts
+        document.querySelectorAll('.player-seat.mafia-targeted').forEach(seat => {
+            seat.classList.remove('mafia-targeted');
+        });
     });
 
-    socket.on('mafia:teammateVote', ({ actorName, targetName }) => {
+    socket.on('mafia:teammateVote', ({ actorName, targetName, targets }) => {
         showToast(`زميلك ${actorName} صوت لقتل ${targetName}`, 'warning');
+
+        // Remove previous teammate vote indicators
+        document.querySelectorAll('.player-seat.mafia-targeted').forEach(seat => {
+            seat.classList.remove('mafia-targeted');
+        });
+
+        // Add indicator to all current mafia targets
+        if (targets && Array.isArray(targets)) {
+            targets.forEach(tid => {
+                // Don't add to the one I already selected physically (so they don't overlap confusingly, though it's fine if they do)
+                if (tid !== state.selectedTarget) {
+                    const seat = document.querySelector(`.player-seat[data-player-id="${tid}"]`);
+                    if (seat) seat.classList.add('mafia-targeted');
+                }
+            });
+        }
     });
 
     socket.on('game:over', (data) => {

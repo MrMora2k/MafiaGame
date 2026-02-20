@@ -1650,6 +1650,29 @@ select {
     animation: selectPulse 1.5s ease-in-out infinite;
 }
 
+/* Mafia Teammate Target Indicator */
+.player-seat.mafia-targeted::after {
+    content: '🔪';
+    position: absolute;
+    top: -15px;
+    right: -15px;
+    font-size: 1.8rem;
+    filter: drop-shadow(0 0 8px rgba(220, 38, 38, 0.8));
+    animation: stabPulse 1s ease-in-out infinite alternate;
+    z-index: 20;
+    pointer-events: none;
+}
+
+@keyframes stabPulse {
+    from {
+        transform: scale(1) translateY(0);
+    }
+
+    to {
+        transform: scale(1.1) translateY(-5px);
+    }
+}
+
 @keyframes selectPulse {
 
     0%,
@@ -1778,6 +1801,31 @@ select {
     color: var(--text-secondary);
     font-size: 0.85rem;
     margin-bottom: 10px;
+}
+
+/* Centered Skip Button over the table */
+#skip-action-btn {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 60;
+    min-width: 140px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 20px rgba(124, 94, 245, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    animation: skipBtnPulse 2s infinite;
+}
+
+@keyframes skipBtnPulse {
+
+    0%,
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(1.05);
+    }
 }
 
 /* ==================== MODALS ==================== */
