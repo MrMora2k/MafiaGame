@@ -282,8 +282,6 @@ async function handleAuthSubmit(e) {
         const endpoint = state.authMode === 'login' ? '/api/login' : '/api/register';
         const fullUrl = `${API_BASE_URL}${endpoint}`;
 
-        // --- DEBUG ALERT FOR APK ---
-        if (API_BASE_URL) alert(`⏳ جاري الاتصال بـ:\n${fullUrl}\nبيانات: ${username}`);
 
         console.log(`[AUTH] Sending request to ${endpoint}...`);
 
@@ -306,11 +304,7 @@ async function handleAuthSubmit(e) {
     } catch (err) {
         console.error('[AUTH] Request Failed:', err);
         const errorMsg = `تعذر الاتصال بالخادم: ${err.message}. URL: ${API_BASE_URL}`;
-        showAuthError(errorMsg);
-        // Also alert for mobile debugging
-        if (getApiBaseUrl()) {
-            alert(errorMsg);
-        }
+        showAuthError(`تعذر الاتصال بالخادم. الرجاء التأكد من جودة الإنترنت.`);
     } finally {
         setAuthLoading(false);
     }
@@ -343,9 +337,6 @@ async function checkAuth(source = 'unknown') {
             return;
         }
 
-        // --- DEBUG ALERT FOR APK ---
-        if (API_BASE_URL) alert(`⏳ التحقق من الجلسة:\nURL: ${API_BASE_URL}/api/me`);
-
         const res = await fetch(`${API_BASE_URL}/api/me`, {
             headers: { 'Authorization': `Bearer ${state.token}` }
         });
@@ -364,12 +355,10 @@ async function checkAuth(source = 'unknown') {
             connectSocket();
         } else {
             console.warn('[AUTH] Auth failed or user data missing:', data);
-            if (API_BASE_URL) alert('فشل التحقق بسبب البيانات: ' + JSON.stringify(data));
             logout();
         }
     } catch (err) {
         console.error('[AUTH] Auth check crashed:', err);
-        if (API_BASE_URL) alert('خطأ أثناء التحقق: ' + err.message);
         logout();
     } finally {
         state.isCheckingAuth = false;
