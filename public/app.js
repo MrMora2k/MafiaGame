@@ -364,10 +364,12 @@ async function checkAuth(source = 'unknown') {
             connectSocket();
         } else {
             console.warn('[AUTH] Auth failed or user data missing:', data);
+            if (API_BASE_URL) alert('فشل التحقق بسبب البيانات: ' + JSON.stringify(data));
             logout();
         }
     } catch (err) {
         console.error('[AUTH] Auth check crashed:', err);
+        if (API_BASE_URL) alert('خطأ أثناء التحقق: ' + err.message);
         logout();
     } finally {
         state.isCheckingAuth = false;
