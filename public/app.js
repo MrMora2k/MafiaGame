@@ -683,6 +683,8 @@ function setupSocketEvents() {
         // Clear any leftover targeted UI tags from previous nights
         document.querySelectorAll('.player-seat.mafia-targeted').forEach(seat => {
             seat.classList.remove('mafia-targeted');
+            const txt = seat.querySelector('.mafia-target-text');
+            if (txt) txt.remove();
         });
     });
 
@@ -690,6 +692,8 @@ function setupSocketEvents() {
         // Clear target UI when day starts
         document.querySelectorAll('.player-seat.mafia-targeted').forEach(seat => {
             seat.classList.remove('mafia-targeted');
+            const txt = seat.querySelector('.mafia-target-text');
+            if (txt) txt.remove();
         });
     });
 
@@ -699,15 +703,42 @@ function setupSocketEvents() {
         // Remove previous teammate vote indicators
         document.querySelectorAll('.player-seat.mafia-targeted').forEach(seat => {
             seat.classList.remove('mafia-targeted');
+            const txt = seat.querySelector('.mafia-target-text');
+            if (txt) txt.remove();
         });
 
         // Add indicator to all current mafia targets
         if (targets && Array.isArray(targets)) {
             targets.forEach(tid => {
-                // Don't add to the one I already selected physically (so they don't overlap confusingly, though it's fine if they do)
+                // Don't add to the one I already selected physically
                 if (tid !== state.selectedTarget) {
                     const seat = document.querySelector(`.player-seat[data-player-id="${tid}"]`);
-                    if (seat) seat.classList.add('mafia-targeted');
+                    if (seat) {
+                        seat.classList.add('mafia-targeted');
+
+                        // Add explicit text banner to make it impossible to miss
+                        if (!seat.querySelector('.mafia-target-text')) {
+                            const textEl = document.createElement('div');
+                            textEl.className = 'mafia-target-text';
+                            textEl.innerHTML = '🎯 مستهدف';
+                            textEl.style.position = 'absolute';
+                            textEl.style.top = '-32px';
+                            textEl.style.left = '50%';
+                            textEl.style.transform = 'translateX(-50%)';
+                            textEl.style.background = '#dc2626';
+                            textEl.style.color = 'white';
+                            textEl.style.padding = '2px 8px';
+                            textEl.style.borderRadius = '8px';
+                            textEl.style.fontSize = '0.8rem';
+                            textEl.style.fontWeight = 'bold';
+                            textEl.style.whiteSpace = 'nowrap';
+                            textEl.style.zIndex = '30';
+                            textEl.style.boxShadow = '0 2px 10px rgba(220, 38, 38, 0.6)';
+                            textEl.style.border = '1px solid #fca5a5';
+                            textEl.style.animation = 'stabPulse 1s infinite alternate';
+                            seat.appendChild(textEl);
+                        }
+                    }
                 }
             });
         }
