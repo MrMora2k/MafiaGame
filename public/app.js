@@ -11,6 +11,7 @@ if ('serviceWorker' in navigator) {
 console.log('--- Mafia App Script Execution Started --- VERSION 2.0 ---');
 
 // ==================== SOCKET & STATE ====================
+let socket = null;
 const PROD_URL = 'https://mafiagame-29vw.onrender.com';
 
 function getApiBaseUrl() {
