@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <title>مافيا - الطاولة المستديرة</title>
     <meta name="description" content="لعبة مافيا جماعية مباشرة مع واجهة الطاولة المستديرة">
 
@@ -342,6 +342,7 @@
                     <div class="round-table">
                         <div class="table-center">
                             <div class="table-texture"></div>
+                            <button class="btn btn-secondary btn-skip-center" id="skip-action-btn" style="display: none;">تخطي التصويت</button>
                         </div>
                         <!-- Player seats will be dynamically added here -->
                         <div class="seats-container" id="seats-container"></div>
@@ -351,10 +352,7 @@
                 <!-- Action Panel (alive players) -->
                 <div class="action-panel" id="action-panel">
                     <div class="action-title" id="action-title">اختر لاعباً</div>
-                    <div class="action-hint" id="action-hint">اضغط على لاعب حول الطاولة لتنفيذ إجراءك
-                    </div>
-                    <button class="btn btn-secondary" id="skip-action-btn" style="display: none;">تخطي
-                        التصويت</button>
+                    <div class="action-hint" id="action-hint">اضغط على لاعب حول الطاولة لتنفيذ إجراءك</div>
                 </div>
 
                 <!-- Spectator Banner (dead players) -->

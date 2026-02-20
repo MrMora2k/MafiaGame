@@ -82,6 +82,8 @@ app.get('/api/me', async (req, res) => {
 // Socket Auth Middleware
 io.use((socket, next) => {
     const token = socket.handshake.auth.token;
+    // Client-provided stable id (for guests / reconnection)
+    socket.clientId = socket.handshake.auth?.clientId || null;
     if (token) {
         try {
             const decoded = jwt.verify(token, SECRET_KEY);
@@ -113,6 +115,9 @@ app.get('/api/rooms', (req, res) => {
 
 // Game state storage
 const rooms = new Map();
+
+// Disconnect grace timers (roomCode:stableKey -> timeoutId)
+const disconnectTimers = new Map();
 
 // Role types
 const ROLES = {
@@ -268,6 +273,7 @@ function resetRoomForNewGame(room) {
     room.nightActions = {};
     room.votes = {};
     room.dayNumber = 0;
+    room.lastTurnPlayerNumber = null;
     room.players.forEach(p => {
         p.role = null;
         p.alive = true;
@@ -282,27 +288,142 @@ function handlePlayerLeave(socket) {
     const room = rooms.get(roomCode);
     if (!room) return;
 
+    const leavingPlayer = room.players.find(p => p.id === socket.id);
+    const leavingWasHost = room.host === socket.id;
+    const leavingWasCurrentTurn = room.currentTurnPlayerId === socket.id;
+    const leavingStableKey = leavingPlayer ? getStablePlayerKeyFromPlayer(leavingPlayer) : null;
+
     // Remove player from room
     room.players = room.players.filter(p => p.id !== socket.id);
     socket.leave(roomCode);
+    socket.roomCode = null;
+
+    if (leavingStableKey) {
+        const tkey = `${roomCode}:${leavingStableKey}`;
+        if (disconnectTimers.has(tkey)) {
+            clearTimeout(disconnectTimers.get(tkey));
+            disconnectTimers.delete(tkey);
+        }
+    }
 
     // If room is empty, delete it
     if (room.players.length === 0) {
+        clearRoomTimer(roomCode);
         rooms.delete(roomCode);
         console.log(`Room ${roomCode} deleted (empty)`);
         return;
     }
 
     // If host left, assign new host
-    if (room.host === socket.id && room.players.length > 0) {
+    if (leavingWasHost && room.players.length > 0) {
         room.host = room.players[0].id;
         io.to(room.players[0].id).emit('host:assigned');
         console.log(`New host assigned in room ${roomCode}: ${room.players[0].name}`);
     }
 
+    // If the current turn player left (and timers might be disabled), advance immediately
+    if (leavingWasCurrentTurn && (room.phase === PHASES.NIGHT || room.phase === PHASES.DAY)) {
+        clearRoomTimer(roomCode);
+        // Preserve order: advanceTurn will use lastTurnPlayerNumber as a hint if current player is missing
+        room.lastTurnPlayerNumber = leavingPlayer?.playerNumber ?? room.lastTurnPlayerNumber ?? null;
+        advanceTurn(room);
+    }
+
     // Notify remaining players
     io.to(roomCode).emit('player:list', room.players);
     console.log(`Player ${socket.id} left room ${roomCode}`);
+}
+
+function getStablePlayerKeyFromSocket(socket) {
+    if (socket.userId) return `u:${socket.userId}`;
+    if (socket.clientId) return `c:${socket.clientId}`;
+    return `s:${socket.id}`;
+}
+
+function getStablePlayerKeyFromPlayer(player) {
+    if (player.userId) return `u:${player.userId}`;
+    if (player.clientId) return `c:${player.clientId}`;
+    return `s:${player.id}`;
+}
+
+function scheduleDisconnectedCleanup(roomCode, stableKey, seconds = 45) {
+    const key = `${roomCode}:${stableKey}`;
+    if (disconnectTimers.has(key)) {
+        clearTimeout(disconnectTimers.get(key));
+        disconnectTimers.delete(key);
+    }
+    const tid = setTimeout(() => {
+        disconnectTimers.delete(key);
+        const room = rooms.get(roomCode);
+        if (!room) return;
+        const idx = room.players.findIndex(p => getStablePlayerKeyFromPlayer(p) === stableKey && p.connected === false);
+        if (idx === -1) return;
+
+        const removed = room.players[idx];
+        const wasHost = room.host === removed.id;
+        const wasCurrentTurn = room.currentTurnPlayerId === removed.id;
+
+        room.players.splice(idx, 1);
+
+        if (room.players.length === 0) {
+            clearRoomTimer(roomCode);
+            rooms.delete(roomCode);
+            console.log(`Room ${roomCode} deleted (empty after disconnect grace)`);
+            return;
+        }
+
+        if (wasHost) {
+            const nextHost = room.players.find(p => p.connected !== false) || room.players[0];
+            room.host = nextHost.id;
+            io.to(nextHost.id).emit('host:assigned');
+        }
+
+        if (wasCurrentTurn && (room.phase === PHASES.NIGHT || room.phase === PHASES.DAY)) {
+            clearRoomTimer(roomCode);
+            room.lastTurnPlayerNumber = removed.playerNumber ?? room.lastTurnPlayerNumber ?? null;
+            advanceTurn(room);
+        }
+
+        io.to(roomCode).emit('player:list', room.players);
+        console.log(`[CLEANUP] Removed disconnected player ${removed.name} from room ${roomCode}`);
+    }, seconds * 1000);
+    disconnectTimers.set(key, tid);
+}
+
+function handlePlayerDisconnect(socket) {
+    const roomCode = socket.roomCode;
+    if (!roomCode) return;
+    const room = rooms.get(roomCode);
+    if (!room) return;
+
+    const stableKey = getStablePlayerKeyFromSocket(socket);
+    const player = room.players.find(p => getStablePlayerKeyFromPlayer(p) === stableKey);
+    if (!player) return;
+
+    const wasHost = room.host === player.id;
+    const wasCurrentTurn = room.currentTurnPlayerId === player.id;
+
+    player.connected = false;
+    console.log(`[DISCONNECT] Marked ${player.name} disconnected in room ${roomCode}`);
+
+    // If host disconnected, reassign to keep game moving
+    if (wasHost) {
+        const nextHost = room.players.find(p => p.connected !== false && p.id !== player.id) || null;
+        if (nextHost) {
+            room.host = nextHost.id;
+            io.to(nextHost.id).emit('host:assigned');
+        }
+    }
+
+    // If current turn disconnected, advance immediately (especially مهم عندما التايمر غير محدود)
+    if (wasCurrentTurn && (room.phase === PHASES.NIGHT || room.phase === PHASES.DAY)) {
+        clearRoomTimer(roomCode);
+        room.lastTurnPlayerNumber = player.playerNumber ?? room.lastTurnPlayerNumber ?? null;
+        advanceTurn(room);
+    }
+
+    io.to(roomCode).emit('player:list', room.players);
+    scheduleDisconnectedCleanup(roomCode, stableKey, 45);
 }
 
 // Socket.io connection handling
@@ -312,7 +433,90 @@ io.on('connection', (socket) => {
     // Handle disconnect
     socket.on('disconnect', () => {
         console.log(`Player disconnected: ${socket.id}`);
-        handlePlayerLeave(socket);
+        handlePlayerDisconnect(socket);
+    });
+
+    // Rejoin an existing room after reconnect (same userId or clientId)
+    socket.on('room:rejoin', ({ roomCode }) => {
+        const code = (roomCode || '').toUpperCase();
+        const room = rooms.get(code);
+        if (!room) {
+            socket.emit('room:error', 'Room not found');
+            return;
+        }
+
+        // Find previous player record by authenticated userId first, else stable clientId
+        let existing = null;
+        if (socket.userId) {
+            existing = room.players.find(p => p.userId && p.userId === socket.userId) || null;
+        }
+        if (!existing && socket.clientId) {
+            existing = room.players.find(p => p.clientId && p.clientId === socket.clientId) || null;
+        }
+        if (!existing) {
+            socket.emit('room:error', 'Rejoin failed');
+            return;
+        }
+
+        const oldSocketId = existing.id;
+        existing.id = socket.id;
+        existing.connected = true;
+
+        // Clear pending cleanup timer
+        const stableKey = getStablePlayerKeyFromPlayer(existing);
+        const tkey = `${code}:${stableKey}`;
+        if (disconnectTimers.has(tkey)) {
+            clearTimeout(disconnectTimers.get(tkey));
+            disconnectTimers.delete(tkey);
+        }
+
+        socket.join(code);
+        socket.roomCode = code;
+
+        // Host reassignment if host reconnected
+        if (room.host === oldSocketId) {
+            room.host = socket.id;
+            io.to(socket.id).emit('host:assigned');
+        }
+
+        // Fix current turn pointer if it was pointing to the old socket id
+        if (room.currentTurnPlayerId === oldSocketId) {
+            room.currentTurnPlayerId = socket.id;
+            io.to(code).emit('turn:change', {
+                playerId: existing.id,
+                playerNumber: existing.playerNumber,
+                name: existing.name
+            });
+        }
+
+        // Re-send the role to the rejoined player (important for UI stability)
+        const mafiaTeam = room.players
+            .filter(p => p.role === ROLES.MAFIA)
+            .map(p => ({ id: p.id, name: p.name, playerNumber: p.playerNumber }));
+
+        const roleData = { role: existing.role, phase: room.phase };
+        if (existing.role === ROLES.MAFIA) {
+            roleData.teammates = mafiaTeam.filter(m => m.id !== existing.id);
+        }
+        io.to(socket.id).emit('role:assigned', roleData);
+
+        // Send a snapshot so the client can restore screen/state
+        socket.emit('room:rejoined', {
+            roomCode: code,
+            phase: room.phase,
+            dayNumber: room.dayNumber,
+            settings: room.settings,
+            players: room.players.map(p => ({ id: p.id, name: p.name, playerNumber: p.playerNumber, alive: p.alive })),
+            currentTurn: room.currentTurnPlayerId
+                ? (() => {
+                    const cur = room.players.find(p => p.id === room.currentTurnPlayerId);
+                    return cur ? { playerId: cur.id, playerNumber: cur.playerNumber, name: cur.name } : null;
+                })()
+                : null
+        });
+
+        io.to(code).emit('player:list', room.players);
+        console.log(`[REJOIN] ${existing.name} rejoined room ${code} (${oldSocketId} -> ${socket.id})`);
     });
 
     // Create a new room with settings
@@ -325,12 +529,16 @@ io.on('connection', (socket) => {
             host: socket.id,
             phase: PHASES.LOBBY,
             settings: roomSettings,
+            lastTurnPlayerNumber: null,
             players: [{
                 id: socket.id,
+                userId: socket.userId || null,
+                clientId: socket.clientId || socket.id,
                 name: playerName,
                 playerNumber: 1,
                 role: null,
                 alive: true,
+                connected: true,
                 ready: false
             }],
             nightActions: {},
@@ -377,10 +585,13 @@ io.on('connection', (socket) => {
 
         room.players.push({
             id: socket.id,
+            userId: socket.userId || null,
+            clientId: socket.clientId || socket.id,
             name: playerName,
             playerNumber: room.players.length + 1,
             role: null,
             alive: true,
+            connected: true,
             ready: false
         });
 
@@ -633,38 +844,12 @@ io.on('connection', (socket) => {
         advanceTurn(room);
     });
 
-    // Disconnect handling
-    socket.on('disconnect', () => {
-        console.log(`Player disconnected: ${socket.id}`);
-        handlePlayerLeave(socket);
-    });
 });
-
-function handlePlayerLeave(socket) {
-    if (socket.roomCode) {
-        const room = rooms.get(socket.roomCode);
-        if (room) {
-            room.players = room.players.filter(p => p.id !== socket.id);
-
-            if (room.players.length === 0) {
-                rooms.delete(socket.roomCode);
-                console.log(`Room ${socket.roomCode} deleted (empty)`);
-            } else {
-                if (room.host === socket.id) {
-                    room.host = room.players[0].id;
-                    io.to(room.players[0].id).emit('host:assigned');
-                }
-
-                io.to(socket.roomCode).emit('player:list', room.players);
-            }
-        }
-    }
-}
 
 // Helper to get alive players sorted by playerNumber
 function getSortedAlivePlayers(room) {
     return room.players
-        .filter(p => p.alive)
+        .filter(p => p.alive && p.connected !== false)
         .sort((a, b) => a.playerNumber - b.playerNumber);
 }
 
@@ -748,8 +933,13 @@ function advanceTurn(room) {
     let nextPlayer = null;
 
     if (currentIndex === -1) {
-        // Should not happen if logic is correct, but safe fallback to first
-        nextPlayer = sortedAlive[0];
+        // Current turn player missing (disconnect/rejoin edge). Use lastTurnPlayerNumber to keep order.
+        if (sortedAlive.length > 0) {
+            const lastNum = typeof room.lastTurnPlayerNumber === 'number' ? room.lastTurnPlayerNumber : null;
+            nextPlayer = (lastNum != null)
+                ? (sortedAlive.find(p => p.playerNumber > lastNum) || sortedAlive[0])
+                : sortedAlive[0];
+        }
     } else if (currentIndex < sortedAlive.length - 1) {
         nextPlayer = sortedAlive[currentIndex + 1];
         console.log(`[DEBUG] Advancing turn to: ${nextPlayer.name} (#${nextPlayer.playerNumber})`);
@@ -770,6 +960,7 @@ function advanceTurn(room) {
 
     if (nextPlayer) {
         room.currentTurnPlayerId = nextPlayer.id;
+        room.lastTurnPlayerNumber = nextPlayer.playerNumber;
         io.to(room.code).emit('turn:change', {
             playerId: nextPlayer.id,
             playerNumber: nextPlayer.playerNumber,
@@ -815,6 +1006,7 @@ function startNightPhase(room) {
     const sortedAlive = getSortedAlivePlayers(room);
     if (sortedAlive.length > 0) {
         room.currentTurnPlayerId = sortedAlive[0].id;
+        room.lastTurnPlayerNumber = sortedAlive[0].playerNumber;
     }
 
     io.to(room.code).emit('phase:night', {
@@ -974,6 +1166,7 @@ function startDayPhase(room) {
     const sortedAlive = getSortedAlivePlayers(room);
     if (sortedAlive.length > 0) {
         room.currentTurnPlayerId = sortedAlive[0].id;
+        room.lastTurnPlayerNumber = sortedAlive[0].playerNumber;
     }
 
     io.to(room.code).emit('phase:day', {

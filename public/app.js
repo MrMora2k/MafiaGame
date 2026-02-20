@@ -14,6 +14,21 @@ console.log('--- Mafia App Script Execution Started --- VERSION 2.0 ---');
 let socket = null;
 const PROD_URL = 'https://mafiagame-29vw.onrender.com';
 
+// Stable client id (helps reconnection/rejoin حتى للضيوف)
+function getOrCreateClientId() {
+    const key = 'mafia_client_id';
+    let id = localStorage.getItem(key);
+    if (id) return id;
+    try {
+        id = (crypto && crypto.randomUUID) ? crypto.randomUUID() : `cid_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    } catch (e) {
+        id = `cid_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    }
+    localStorage.setItem(key, id);
+    return id;
+}
+const CLIENT_ID = getOrCreateClientId();
+
 function getApiBaseUrl() {
     // FORCE PRODUCTION URL FOR APK BUILD
     // (Bypasses all detection logic to ensure connection works)
@@ -24,7 +39,7 @@ const API_BASE_URL = getApiBaseUrl();
 console.log('[ENV] Using API_BASE_URL:', API_BASE_URL || '(relative)');
 
 const state = {
-    roomCode: null,
+    roomCode: localStorage.getItem('mafia_room_code') || null,
     playerId: null,
     username: null,
     role: null,
@@ -414,7 +429,12 @@ function connectSocket() {
     // For production app, it MUST be the full URL.
     const socketUrl = API_BASE_URL || undefined;
     socket = io(socketUrl, {
-        auth: { token: state.token },
+        auth: { token: state.token, clientId: CLIENT_ID },
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 800,
+        reconnectionDelayMax: 3000,
+        timeout: 20000,
         transports: ['websocket', 'polling'] // Crucial for Capacitor/CORS issues
     });
 
@@ -663,6 +683,13 @@ function setupSocketEvents() {
 
     socket.on('connect', () => {
         console.log('Connected to server');
+        // Always keep the current socket id in state (it changes after reconnect)
+        state.playerId = socket.id;
+
+        // If we were in a room and got disconnected, try to rejoin automatically
+        if (state.roomCode) {
+            socket.emit('room:rejoin', { roomCode: state.roomCode });
+        }
     });
 
     socket.on('disconnect', () => {
@@ -679,6 +706,7 @@ function setupSocketEvents() {
     // ==================== SOCKET EVENTS - LOBBY ====================
     socket.on('room:created', ({ roomCode, players, settings }) => {
         state.roomCode = roomCode;
+        localStorage.setItem('mafia_room_code', roomCode);
         state.isHost = true;
         state.playerId = socket.id;
         state.players = players;
@@ -692,6 +720,7 @@ function setupSocketEvents() {
 
     socket.on('room:joined', ({ roomCode, players, settings }) => {
         state.roomCode = roomCode;
+        localStorage.setItem('mafia_room_code', roomCode);
         state.playerId = socket.id;
         state.players = players;
         elements.displayRoomCode.textContent = roomCode;
@@ -700,12 +729,49 @@ function setupSocketEvents() {
         showScreen('waiting');
     });
 
+    // Restore state after reconnect
+    socket.on('room:rejoined', ({ roomCode, phase, dayNumber, settings, players, currentTurn }) => {
+        state.roomCode = roomCode;
+        localStorage.setItem('mafia_room_code', roomCode);
+        state.phase = phase || state.phase;
+        state.players = players || [];
+        state.dayNumber = dayNumber || 0;
+        state.currentTurn = currentTurn || null;
+        state.hasActed = false;
+        state.selectedTarget = null;
+        if (settings) applySettings(settings);
+
+        // Navigate حسب مرحلة السيرفر
+        if (phase === 'lobby') {
+            updatePlayerList(state.players);
+            showScreen('waiting');
+        } else if (phase === 'roleReveal') {
+            showScreen('role');
+        } else if (phase === 'night') {
+            state.phase = 'night';
+            updateActionPanel();
+            updateSpectatorUI();
+            renderSeats();
+            showScreen('game');
+        } else if (phase === 'day') {
+            state.phase = 'day';
+            updateActionPanel();
+            updateSpectatorUI();
+            renderSeats();
+            showScreen('game');
+        } else if (phase === 'gameOver') {
+            state.phase = 'gameover';
+            showScreen('gameover');
+        }
+    });
+
     socket.on('room:error', (message) => {
         showError(message);
     });
 
     socket.on('room:left', () => {
         state.roomCode = null;
+        localStorage.removeItem('mafia_room_code');
         state.isHost = false;
         state.players = [];
         document.body.classList.remove('theme-day'); // Reset to night theme
@@ -1402,38 +1468,6 @@ safeAddEvent(elements.playAgainBtn, 'click', () => {
 
 safeAddEvent(elements.leaveGameBtn, 'click', () => {
     socket.emit('room:leave');
-});
-
-// = [LOBBY EVENTS] =
-safeAddEvent(elements.createBtn, 'click', () => {
-    socket.emit('room:create', { playerName: state.username });
-});
-
-safeAddEvent(elements.joinBtn, 'click', () => {
-    const code = elements.roomCodeInput.value.trim().toUpperCase();
-    if (!code || code.length !== 6) return showError('الرجاء إدخال كود غرفة صحيح من 6 أحرف');
-    socket.emit('room:join', { roomCode: code, playerName: state.username });
-});
-
-safeAddEvent(elements.refreshRoomsBtn, 'click', () => {
-    socket.emit('rooms:get');
-});
-
-safeAddEvent(elements.copyCodeBtn, 'click', () => {
-    const code = elements.displayRoomCode.textContent;
-    navigator.clipboard.writeText(code).then(() => {
-        const originalText = elements.copyCodeBtn.innerHTML;
-        elements.copyCodeBtn.innerHTML = '✅ نسخ';
-        setTimeout(() => elements.copyCodeBtn.innerHTML = originalText, 2000);
-    });
-});
-
-safeAddEvent(elements.leaveRoomBtn, 'click', () => {
-    socket.emit('room:leave');
-});
-
-safeAddEvent(elements.startGameBtn, 'click', () => {
-    socket.emit('game:start');
 });
 
 // Enable enter key for forms
