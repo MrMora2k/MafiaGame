@@ -11,16 +11,22 @@ if ('serviceWorker' in navigator) {
 console.log('--- Mafia App Script Execution Started --- VERSION 2.0 ---');
 
 // ==================== SOCKET & STATE ====================
-let socket;
 const PROD_URL = 'https://mafiagame-29vw.onrender.com';
 
 function getApiBaseUrl() {
-    // Check if running in Capacitor or non-browser env (simplified check)
-    const isApp = window.location.protocol === 'file:' || window.Capacitor;
+    // Detailed detection for APK/Capacitor environment
+    const isCapacitor = !!window.Capacitor;
+    const isLocalFile = window.location.protocol === 'file:';
+    const isAndroidApp = window.location.hostname === 'localhost' && !window.location.port; // Capacitor Android default
+
+    const isApp = isCapacitor || isLocalFile || isAndroidApp;
+
+    console.log('[ENV] App detection:', { isCapacitor, isLocalFile, isAndroidApp, isApp });
     return isApp ? PROD_URL : '';
 }
 
 const API_BASE_URL = getApiBaseUrl();
+console.log('[ENV] Using API_BASE_URL:', API_BASE_URL || '(relative)');
 
 const state = {
     roomCode: null,
@@ -299,7 +305,12 @@ async function handleAuthSubmit(e) {
         }
     } catch (err) {
         console.error('[AUTH] Request Failed:', err);
-        showAuthError('تعذر الاتصال بالخادم. تأكد من تشغيله.');
+        const errorMsg = `تعذر الاتصال بالخادم: ${err.message}. URL: ${API_BASE_URL}`;
+        showAuthError(errorMsg);
+        // Also alert for mobile debugging
+        if (getApiBaseUrl()) {
+            alert(errorMsg);
+        }
     } finally {
         setAuthLoading(false);
     }
@@ -365,8 +376,17 @@ function connectSocket() {
     // For production app, it MUST be the full URL.
     const socketUrl = API_BASE_URL || undefined;
     socket = io(socketUrl, {
-        auth: { token: state.token }
+        auth: { token: state.token },
+        transports: ['websocket', 'polling'] // Crucial for Capacitor/CORS issues
     });
+
+    socket.on('connect_error', (err) => {
+        console.error('[SOCKET] Connection Error:', err);
+        if (getApiBaseUrl()) {
+            alert(`خطأ في الاتصال باللعبة (Socket): ${err.message}\nتأكد من جودة الإنترنت.`);
+        }
+    });
+
     setupSocketEvents();
 }
 
