@@ -1216,6 +1216,7 @@ function renderSeats() {
         return `
             <div class="${classes}" data-player-id="${player.id}" style="--angle: ${angle}deg">
                 <div class="seat-avatar">${avatarContent}</div>
+                <div class="target-indicator">🔪</div>
                 <span class="seat-name">${player.name}${isSelf ? ' (أنت)' : ''}</span>
                 <span class="vote-count hidden">0</span>
             </div>

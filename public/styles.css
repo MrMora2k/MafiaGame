@@ -1651,8 +1651,8 @@ select {
 }
 
 /* Mafia Teammate Target Indicator */
-.player-seat.mafia-targeted::after {
-    content: '🔪';
+.target-indicator {
+    display: none;
     position: absolute;
     top: -15px;
     right: -15px;
@@ -1661,6 +1661,10 @@ select {
     animation: stabPulse 1s ease-in-out infinite alternate;
     z-index: 20;
     pointer-events: none;
+}
+
+.player-seat.mafia-targeted .target-indicator {
+    display: block;
 }
 
 @keyframes stabPulse {
