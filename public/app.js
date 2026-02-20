@@ -280,9 +280,14 @@ async function handleAuthSubmit(e) {
 
     try {
         const endpoint = state.authMode === 'login' ? '/api/login' : '/api/register';
+        const fullUrl = `${API_BASE_URL}${endpoint}`;
+
+        // --- DEBUG ALERT FOR APK ---
+        if (API_BASE_URL) alert(`⏳ جاري الاتصال بـ:\n${fullUrl}\nبيانات: ${username}`);
+
         console.log(`[AUTH] Sending request to ${endpoint}...`);
 
-        const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        const res = await fetch(fullUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ username, password })
@@ -337,6 +342,9 @@ async function checkAuth(source = 'unknown') {
             state.isCheckingAuth = false;
             return;
         }
+
+        // --- DEBUG ALERT FOR APK ---
+        if (API_BASE_URL) alert(`⏳ التحقق من الجلسة:\nURL: ${API_BASE_URL}/api/me`);
 
         const res = await fetch(`${API_BASE_URL}/api/me`, {
             headers: { 'Authorization': `Bearer ${state.token}` }
