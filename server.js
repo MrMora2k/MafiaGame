@@ -543,19 +543,19 @@ io.on('connection', (socket) => {
             target: targetId
         });
 
-        // Broadcast to other mafia
+        // إشعار جميع المافيا باختيارات الفريق (كل المافيا يرون من تم التصويت عليه)
         if (player.role === ROLES.MAFIA) {
-            const mafiaTeammates = room.players.filter(p => p.role === ROLES.MAFIA && p.id !== socket.id);
+            const allMafia = room.players.filter(p => p.role === ROLES.MAFIA && p.alive);
             const targetName = room.players.find(p => p.id === targetId)?.name || 'Unknown';
-
-            // Get all current active mafia targets
             const currentMafiaTargets = room.nightActions[ROLES.MAFIA].map(a => a.target);
+            const currentTargetNames = currentMafiaTargets.map(tid => room.players.find(p => p.id === tid)?.name || 'مجهول');
 
-            mafiaTeammates.forEach(tm => {
-                io.to(tm.id).emit('mafia:teammateVote', {
+            allMafia.forEach(m => {
+                io.to(m.id).emit('mafia:teammateVote', {
                     actorName: player.name,
                     targetName: targetName,
-                    targets: currentMafiaTargets // Send array of target IDs
+                    targets: currentMafiaTargets,
+                    targetNames: currentTargetNames
                 });
             });
         }
@@ -775,6 +775,22 @@ function advanceTurn(room) {
             playerNumber: nextPlayer.playerNumber,
             name: nextPlayer.name
         });
+
+        // إرسال قائمة أهداف المافيا الحالية لجميع المافيا عند كل تغيير دور (حتى يرى المافيا الثاني اختيارات الأول)
+        if (room.phase === PHASES.NIGHT) {
+            const mafiaPlayers = room.players.filter(p => p.role === ROLES.MAFIA && p.alive);
+            const mafiaActions = room.nightActions[ROLES.MAFIA] || [];
+            if (mafiaPlayers.length > 0 && mafiaActions.length > 0) {
+                const targetIds = mafiaActions.map(a => a.target);
+                const targetNames = targetIds.map(tid => room.players.find(p => p.id === tid)?.name || 'مجهول');
+                mafiaPlayers.forEach(m => {
+                    io.to(m.id).emit('mafia:targetsUpdate', {
+                        targets: targetIds,
+                        targetNames: targetNames
+                    });
+                });
+            }
+        }
 
         // Start Turn Timer
         const duration = room.phase === PHASES.NIGHT ? room.settings.nightTimer : room.settings.dayTimer;

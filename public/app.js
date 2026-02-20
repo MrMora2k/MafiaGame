@@ -202,6 +202,50 @@ const elements = {
     headerLogoutBtn: document.getElementById('header-logout-btn')
 };
 
+// ==================== TOAST (لإشعارات المافيا وغيرها) ====================
+function showToast(message, type) {
+    try {
+        let el = document.getElementById('mafia-toast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'mafia-toast';
+            el.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);padding:12px 20px;border-radius:12px;color:#fff;font-weight:600;z-index:9999;opacity:0;transition:opacity 0.3s;max-width:90%;text-align:center;';
+            document.body.appendChild(el);
+        }
+        el.textContent = message;
+        el.style.background = type === 'warning' ? 'rgba(220, 38, 38, 0.95)' : 'rgba(124, 94, 245, 0.95)';
+        el.style.opacity = '1';
+        setTimeout(() => { el.style.opacity = '0'; }, 2500);
+    } catch (e) {
+        console.log('[Toast]', message);
+    }
+}
+
+// دالة موحدة لتحديث بانر أهداف المافيا (يُستدعى من mafia:teammateVote و mafia:targetsUpdate)
+function updateMafiaTargetBanner(targetIds, targetNamesFromServer) {
+    const targetBanner = document.getElementById('mafia-target-banner');
+    if (!targetBanner) return;
+
+    let names = [];
+    if (targetNamesFromServer && targetNamesFromServer.length > 0) {
+        names = [...new Set(targetNamesFromServer)];
+    } else if (targetIds && Array.isArray(targetIds) && targetIds.length > 0 && state.players) {
+        names = [...new Set(targetIds.map(tid => {
+            const p = state.players.find(player => player.id === tid);
+            return p ? p.name : 'مجهول';
+        }))];
+    }
+
+    if (names.length > 0) {
+        state.mafiaVotesText = `🔪 اختيارات المافيا حتى الآن: ${names.join(' و ')}`;
+        targetBanner.textContent = state.mafiaVotesText;
+        targetBanner.style.display = 'block';
+    } else {
+        state.mafiaVotesText = null;
+        targetBanner.style.display = 'none';
+    }
+}
+
 // ==================== ERROR HANDLING & UTILS ====================
 window.onerror = function (msg, url, lineNo, columnNo, error) {
     const string = msg.toLowerCase();
@@ -703,43 +747,23 @@ function setupSocketEvents() {
         if (targetBanner) targetBanner.style.display = 'none';
     });
 
-    socket.on('mafia:teammateVote', ({ actorName, targetName, targets }) => {
-        showToast(`زميلك ${actorName} صوت لقتل ${targetName}`, 'warning');
-
-        // Remove previous teammate vote indicators from seats (keep for safety)
+    socket.on('mafia:teammateVote', ({ actorName, targetName, targets, targetNames }) => {
+        try {
+            showToast(`زميلك ${actorName} اختار: ${targetName}`, 'warning');
+        } catch (e) {
+            console.warn('[mafia:teammateVote] toast:', e);
+        }
         document.querySelectorAll('.player-seat.mafia-targeted').forEach(seat => {
             seat.classList.remove('mafia-targeted');
             const txt = seat.querySelector('.mafia-target-text');
             if (txt) txt.remove();
         });
+        updateMafiaTargetBanner(targets || [], targetNames || []);
+    });
 
-        // Top Banner explicit targeting
-        const targetBanner = document.getElementById('mafia-target-banner');
-        if (targetBanner) {
-            let bannerText = null;
-            if (targets && Array.isArray(targets) && targets.length > 0) {
-                // Determine names of targeted players
-                const targetedNames = targets.map(tid => {
-                    const p = state.players.find(player => player.id === tid);
-                    return p ? p.name : 'مجهول';
-                });
-
-                // Show the names
-                const uniqueNames = [...new Set(targetedNames)];
-                bannerText = `🔪 المافيا الباقين اختاروا: ${uniqueNames.join(' و ')}`;
-            } else if (targetName) {
-                // Fallback for old server payloads which only sent the single targetName
-                bannerText = `🔪 المافيا الباقين اختاروا: ${targetName}`;
-            }
-
-            if (bannerText) {
-                state.mafiaVotesText = bannerText;
-                targetBanner.textContent = bannerText;
-                targetBanner.style.display = 'block';
-            } else {
-                targetBanner.style.display = 'none';
-            }
-        }
+    socket.on('mafia:targetsUpdate', ({ targets, targetNames }) => {
+        if (state.role !== 'mafia') return;
+        updateMafiaTargetBanner(targets || [], targetNames || []);
     });
 
     socket.on('game:over', (data) => {
